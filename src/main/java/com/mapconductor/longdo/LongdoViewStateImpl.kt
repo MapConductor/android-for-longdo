@@ -11,7 +11,6 @@ import com.mapconductor.core.features.GeoPoint
 import com.mapconductor.core.features.GeoRectBounds
 import com.mapconductor.core.map.MapCameraPosition
 import com.mapconductor.core.map.MapCameraPositionInterface
-import com.mapconductor.core.map.MapViewHolderInterface
 import com.mapconductor.core.map.MapViewState
 import com.mapconductor.core.map.MapViewStateInterface
 import android.os.Bundle
@@ -84,7 +83,7 @@ class LongdoViewState(
         controller?.fitBounds(bounds, padding)
     }
 
-    override fun getMapViewHolder(): MapViewHolderInterface<*, *>? = controller?.holder
+    override fun getMapViewHolder(): LongdoMapViewHolder? = controller?.holder as? LongdoMapViewHolder
 
     override fun getControllers(): Map<String, OverlayControllerInterface<*, *>>? = controller?.getControllers()
 }

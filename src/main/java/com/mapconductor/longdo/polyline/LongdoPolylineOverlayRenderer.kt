@@ -2,13 +2,11 @@ package com.mapconductor.longdo.polyline
 
 import androidx.compose.ui.graphics.toArgb
 import com.longdo.sdk3.LongdoMap
-import com.mapconductor.core.features.normalize
+import com.mapconductor.core.geometry.OverlayGeoJson
+import com.mapconductor.core.geometry.buildUnwrappedPolylinePath
 import com.mapconductor.core.polyline.PolylineEntityInterface
 import com.mapconductor.core.polyline.PolylineOverlayRendererInterface
 import com.mapconductor.core.polyline.PolylineState
-import com.mapconductor.core.spherical.createInterpolatePoints
-import com.mapconductor.core.spherical.createLinearInterpolatePoints
-import com.mapconductor.core.spherical.splitByMeridian
 import org.json.JSONObject
 
 /**
@@ -99,20 +97,10 @@ class LongdoPolylineOverlayRenderer(
      * 座標は経度・緯度の順。子午線をまたぐ場合は複数セグメントに分割する。
      */
     private fun buildGeoJson(state: PolylineState): String? {
-        if (state.points.size < 2) return null
-        val interpolated =
-            (if (state.geodesic) createInterpolatePoints(state.points) else createLinearInterpolatePoints(state.points))
-                .map { it.normalize() }
-        val segments = splitByMeridian(interpolated, state.geodesic).filter { it.size >= 2 }
-        if (segments.isEmpty()) return null
-        val coordinates =
-            segments.joinToString(separator = ",") { segment ->
-                segment.joinToString(separator = ",", prefix = "[", postfix = "]") { p ->
-                    "[${p.longitude},${p.latitude}]"
-                }
-            }
-        return "{\"type\":\"Feature\",\"geometry\":" +
-            "{\"type\":\"MultiLineString\",\"coordinates\":[$coordinates]},\"properties\":{}}"
+        // unwrap 座標の単一パス。MapLibre GL JS は ±180 超の経度を扱えるため分割不要。
+        val path = buildUnwrappedPolylinePath(state.points, state.geodesic)
+        if (path.size < 2) return null
+        return OverlayGeoJson.multiLineStringFeature(listOf(path))
     }
 
     private fun addLineJs(handle: LongdoPolylineHandle): String {

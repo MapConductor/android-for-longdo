@@ -2,15 +2,12 @@ package com.mapconductor.longdo.polygon
 
 import androidx.compose.ui.graphics.toArgb
 import com.longdo.sdk3.LongdoMap
-import com.mapconductor.core.features.GeoPointInterface
-import com.mapconductor.core.features.normalize
+import com.mapconductor.core.geometry.OverlayGeoJson
+import com.mapconductor.core.geometry.buildUnwrappedPolygonRings
 import com.mapconductor.core.polygon.PolygonEntityInterface
 import com.mapconductor.core.polygon.PolygonOverlayRendererInterface
 import com.mapconductor.core.polygon.PolygonState
 import com.mapconductor.core.polygon.unionHoles
-import com.mapconductor.core.spherical.createInterpolatePoints
-import com.mapconductor.core.spherical.createLinearInterpolatePoints
-import com.mapconductor.core.spherical.splitByMeridian
 import org.json.JSONObject
 
 /**
@@ -112,41 +109,12 @@ class LongdoPolygonOverlayRenderer(
      * 複数穴は偶奇規則の打ち消しを避けるため [unionHoles] で結合してから渡す。
      */
     private fun buildGeoJson(state: PolygonState): String? {
-        if (state.points.size < 3) return null
         val resolved = if (state.holes.size > 1) state.unionHoles() else state
-        val outer = interpolate(resolved.points, resolved.geodesic)
-        val outerRings = splitByMeridian(outer, resolved.geodesic).filter { it.size >= 3 }
-        if (outerRings.isEmpty()) return null
-        val includeHoles = resolved.holes.isNotEmpty() && outerRings.size == 1
-        return if (outerRings.size == 1) {
-            val rings = StringBuilder("[").append(ringToJson(outerRings.first()))
-            if (includeHoles) {
-                resolved.holes.forEach { hole ->
-                    val h = interpolate(hole, resolved.geodesic)
-                    if (h.size >= 3) rings.append(",").append(ringToJson(h))
-                }
-            }
-            rings.append("]")
-            "{\"type\":\"Feature\",\"geometry\":{\"type\":\"Polygon\",\"coordinates\":$rings},\"properties\":{}}"
-        } else {
-            val polygons = outerRings.joinToString(separator = ",") { "[${ringToJson(it)}]" }
-            "{\"type\":\"Feature\",\"geometry\":" +
-                "{\"type\":\"MultiPolygon\",\"coordinates\":[$polygons]},\"properties\":{}}"
-        }
-    }
-
-    private fun interpolate(
-        points: List<GeoPointInterface>,
-        geodesic: Boolean,
-    ): List<GeoPointInterface> =
-        (if (geodesic) createInterpolatePoints(points) else createLinearInterpolatePoints(points))
-            .map { it.normalize() }
-
-    private fun ringToJson(ring: List<GeoPointInterface>): String {
-        val closed = if (ring.first() != ring.last()) ring + ring.first() else ring
-        return closed.joinToString(separator = ",", prefix = "[", postfix = "]") { p ->
-            "[${p.longitude},${p.latitude}]"
-        }
+        // unwrap 座標の外周 1 リング + 全穴。MapLibre GL JS は ±180 超の経度を扱えるため
+        // 分割不要で、±180 跨ぎのポリゴンでも穴を保持できる。
+        return OverlayGeoJson.polygonFeature(
+            buildUnwrappedPolygonRings(resolved.points, resolved.holes, resolved.geodesic),
+        )
     }
 
     private fun addPolygonJs(handle: LongdoPolygonHandle): String {

@@ -67,21 +67,28 @@ fun MapView(modifier: Modifier = Modifier) {
 
 ## Available designs
 
-`LongdoDesign` exposes Longdo base layers: `Normal`, `Gray`, `Poi`, `Traffic`,
-`Satellite`, `Hybrid`, `Terrain`.
+`LongdoDesign` exposes Longdo base layers: `Normal`, `Easy`, `Pastel`, `PastelGray`,
+`Hard`, `Gray`, `Light`, `Night`, `Dark`, `Political`, `Osm`, `Satellite`, `Hybrid`.
+
+## Supported overlays
+
+Marker (including clustering and tile-rendered large marker sets), Polyline, Polygon
+(holes supported), Circle, GroundImage, RasterLayer and InfoBubble — the same unified API
+as the native-GL providers.
 
 ## Notes
 
-The Longdo Map API3 SDK renders Longdo Map JS API3 inside a WebView. Map display,
-camera control (move / animate / fitBounds), design (base layer) switching, and tap /
-camera-move events are supported through the SDK bridge (`call` / `run` and a
-`@JavascriptInterface` event channel).
+The Longdo Map API3 SDK renders Longdo Map JS API3 inside a WebView, so overlays reach the
+map as style layers on the SDK's internal MapLibre GL rather than as native annotations:
+each shape adds one GeoJSON source plus a `fill` / `line` layer pair. Geodesic
+interpolation, antimeridian splitting and hole unioning reuse the shared core utilities
+(`buildUnwrappedPolygonRings`, `unionHoles`), so the resulting geometry matches the other
+providers. Hit-testing is done by the core managers — `PolygonManager` uses a geodesic
+winding test — not by the SDK.
 
-Overlay features that other MapConductor providers implement via native GL layers
-(markers, polygons, polylines, circles, ground images, raster layers) follow a different
-mechanism on this SDK and are not part of this wrapper. The `content` lambda is still
-evaluated under the same `CompositionLocal`s for API compatibility, but overlays are not
-rendered.
+Map display, camera control (move / animate / fitBounds), design (base layer) switching,
+and tap / camera-move events go through the SDK bridge (`call` / `run` and a
+`@JavascriptInterface` event channel).
 
 ## License
 

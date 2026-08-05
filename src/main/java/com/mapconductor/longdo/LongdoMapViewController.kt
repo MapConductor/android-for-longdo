@@ -15,6 +15,9 @@ import com.mapconductor.core.groundimage.GroundImageEvent
 import com.mapconductor.core.groundimage.GroundImageState
 import com.mapconductor.core.groundimage.OnGroundImageEventHandler
 import com.mapconductor.core.map.MapCameraPosition
+import com.mapconductor.core.map.MapGesture
+import com.mapconductor.core.map.MapUISettings
+import com.mapconductor.core.map.MapUISettingsDiagnostics
 import com.mapconductor.core.map.MutableMapServiceRegistry
 import com.mapconductor.core.marker.MarkerCapableInterface
 import com.mapconductor.core.marker.MarkerEventControllerInterface
@@ -50,8 +53,6 @@ import com.mapconductor.longdo.polygon.LongdoPolygonOverlayRenderer
 import com.mapconductor.longdo.polyline.LongdoPolylineController
 import com.mapconductor.longdo.polyline.LongdoPolylineOverlayRenderer
 import com.mapconductor.longdo.zoom.ZoomAltitudeConverter
-import org.json.JSONArray
-import org.json.JSONObject
 import kotlin.math.abs
 import kotlin.math.tan
 import kotlinx.coroutines.CoroutineScope
@@ -60,6 +61,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import org.json.JSONArray
+import org.json.JSONObject
 
 /**
  * MapConductor コアと Longdo Map API3 SDK（[LongdoMap]）を橋渡しするマップコントローラ。
@@ -231,6 +234,22 @@ class LongdoMapViewController(
             pendingCameraPosition = null
         }
         dispatchCameraToOverlays()
+        // Gesture JS issued before ready is dropped by the page; re-apply now.
+        applyUISettings(appliedUISettings)
+    }
+
+    /**
+     * カメラ停止時に [setCameraRestriction] の制限違反を補正する。補正したら true。
+     *
+     * Longdo Map API3 には（Google の `setLatLngBoundsForCameraTarget` に相当する）
+     * カメラ範囲制限の JS API が無いため、android-sdk の HERE/ArcGIS/TomTom と同じく
+     * カメラ停止時に矩形内へクランプして再適用する方式で制限する。
+     * 再適用すると再度カメライベントが発火し、そこでは補正不要になり通常フローへ進む。
+     */
+    fun applyCameraRestrictionCorrectionIfNeeded(current: MapCameraPosition): Boolean {
+        val corrected = cameraRestrictionCorrection(current) ?: return false
+        moveCamera(corrected)
+        return true
     }
 
     override fun moveCamera(position: MapCameraPosition) {
@@ -310,6 +329,8 @@ class LongdoMapViewController(
                 .put("minLat", sw.latitude)
                 .put("maxLon", ne.longitude)
                 .put("maxLat", ne.latitude)
+        // NOTE: Longdo Map API3 の map.bound(box) は境界矩形のみを引数に取り padding 相当の
+        // 余白パラメータを持たないため、padding は反映できない（矩形を膨らませる擬似対応は行わない）。
         if (mapReady) {
             runCatching { longdoMap.call("bound", listOf(bound)) {} }
         }
@@ -694,6 +715,52 @@ class LongdoMapViewController(
         circleController.clear()
         removeMarkerTileRaster()
         markerTileRenderer?.clear()
+    }
+
+    private var appliedUISettings: MapUISettings = MapUISettings.Default
+
+    /**
+     * Longdo runs inside a WebView, so gestures are toggled through its JS API
+     * rather than a native property. Calls made before the page reports ready are
+     * dropped, so the value is remembered and re-applied from [onMapReady].
+     */
+    /**
+     * Longdo runs inside a WebView. Its JS API exposes drag and wheel toggles under
+     * `map.Ui.Mouse`; `map.rotate()` / `map.pitch()` set the camera values rather
+     * than gating a gesture, so rotation and tilt cannot be switched off here.
+     * Calls made before the page reports ready are dropped, so the value is
+     * remembered and re-applied from [onMapReady].
+     */
+    override fun applyUISettings(settings: MapUISettings) {
+        appliedUISettings = settings
+        MapUISettingsDiagnostics.warnIfRequested(
+            settings.rotateGesture,
+            gesture = MapGesture.Rotate,
+            provider = "Longdo",
+            reason = "the Longdo JS API has no rotation gesture toggle (map.rotate only sets the angle)",
+        )
+        MapUISettingsDiagnostics.warnIfRequested(
+            settings.tiltGesture,
+            gesture = MapGesture.Tilt,
+            provider = "Longdo",
+            reason = "the Longdo JS API has no tilt gesture toggle (map.pitch only sets the angle)",
+        )
+        val js =
+            """
+            (function(){
+              try {
+                var m = window.map;
+                if (!m || !m.Ui || !m.Ui.Mouse) return;
+                m.Ui.Mouse.enableDrag(${settings.scrollGesture});
+                m.Ui.Mouse.enableWheel(${settings.zoomGesture});
+                // Touch drags are not covered by enableDrag alone; when every
+                // gesture is off, gate all pointer input.
+                if (m.Ui.Mouse.enable) m.Ui.Mouse.enable(${settings.scrollGesture || settings.zoomGesture});
+                if (m.Ui.Keyboard && m.Ui.Keyboard.enable) m.Ui.Keyboard.enable(${settings.scrollGesture || settings.zoomGesture});
+              } catch (e) {}
+            })()
+            """.trimIndent()
+        runCatching { longdoMap.run(js) {} }
     }
 
     override fun destroy() {

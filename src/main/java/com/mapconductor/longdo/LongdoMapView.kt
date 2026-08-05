@@ -1,5 +1,9 @@
 package com.mapconductor.longdo
 
+import android.annotation.SuppressLint
+import android.os.Handler
+import android.os.Looper
+import android.view.ViewGroup
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -15,6 +19,8 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.viewinterop.AndroidView
@@ -46,14 +52,10 @@ import com.mapconductor.core.marker.MarkerState
 import com.mapconductor.core.polygon.PolygonCapableInterface
 import com.mapconductor.core.polyline.PolylineCapableInterface
 import com.mapconductor.core.raster.RasterLayerCapableInterface
+import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
 import org.json.JSONArray
 import org.json.JSONObject
-import kotlin.math.roundToInt
-import android.annotation.SuppressLint
-import android.os.Handler
-import android.os.Looper
-import android.view.ViewGroup
-import kotlinx.coroutines.delay
 
 /**
  * Longdo Map の地図を表示する Composable。他プロバイダの `*MapView` と同じ引数体系を持ち、
@@ -75,7 +77,7 @@ fun LongdoMapView(
     state: LongdoViewState,
     modifier: Modifier = Modifier,
     markerTiling: com.mapconductor.core.marker.MarkerTilingOptions? = null,
-    @Suppress("UNUSED_PARAMETER") cameraRestriction: com.mapconductor.core.map.CameraRestriction? = null,
+    cameraRestriction: com.mapconductor.core.map.CameraRestriction? = null,
     onMapLoaded: OnMapLoadedHandler? = null,
     onMapClick: OnMapEventHandler? = null,
     @Suppress("UNUSED_PARAMETER") onMapLongClick: OnMapEventHandler? = null,
@@ -127,6 +129,16 @@ fun LongdoMapView(
     // markerTiling 指定時（多数マーカー）はマーカータイリング（ラスターレイヤ）経路で描画する。
     controller.useMarkerLayer = markerTiling != null
     controller.markerTilingOptions = markerTiling
+
+    // This provider builds its view itself rather than going through MapViewBase,
+    // so the shared gesture dispatch has to be wired here.
+    LaunchedEffect(controller, cameraRestriction) {
+        controller.setCameraRestriction(cameraRestriction)
+    }
+
+    LaunchedEffect(controller, state.uiSettings) {
+        controller.applyUISettings(state.uiSettings)
+    }
 
     val overlayScope = remember { LongdoMapViewScope() }
     val registry = remember(overlayScope) { overlayScope.buildRegistry() }
@@ -205,7 +217,7 @@ fun LongdoMapView(
         controller.handleGroundImageTap(point)
         controller.handleCircleTap(point)
     }
-    bridge.onCameraMove = { lon, lat, zoom, bearing, tilt, bounds ->
+    bridge.onCameraMove = cameraMove@{ lon, lat, zoom, bearing, tilt, bounds ->
         val base = currentState.cameraPosition
         val region =
             bounds?.let {
@@ -220,6 +232,10 @@ fun LongdoMapView(
                 paddings = base.paddings,
                 visibleRegion = region,
             )
+        // 範囲・ズーム制限に違反していれば矩形内へ引き戻す（Longdo にはネイティブの範囲制限 API が
+        // 無いため）。android-sdk の HERE/ArcGIS/TomTom と同じく、補正した回は state 更新も
+        // コールバックも行わないので、アプリ側が範囲外のカメラを観測することはない。
+        if (controller.applyCameraRestrictionCorrectionIfNeeded(updated)) return@cameraMove
         currentState.updateCameraPosition(updated)
         // マーカークラスタリング用に、可視領域つきカメラを記録する。
         controller.setLatestOverlayCamera(updated)
@@ -250,6 +266,35 @@ fun LongdoMapView(
             modifier = Modifier.fillMaxSize(),
             factory = { longdoMap },
         )
+
+        // Longdo's JS API only gates *mouse* input (map.Ui.Mouse), so on a touch
+        // device a drag still pans the WebView. Swallow drags natively instead —
+        // taps fall through, so markers stay clickable.
+        val ui = state.uiSettings
+        if (!ui.scrollGesture || !ui.zoomGesture) {
+            Box(
+                modifier =
+                    Modifier
+                        .matchParentSize()
+                        .pointerInput(ui.scrollGesture, ui.zoomGesture) {
+                            awaitPointerEventScope {
+                                while (true) {
+                                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                                    val multiTouch = event.changes.size > 1
+                                    val dragging =
+                                        event.changes.any { change ->
+                                            (change.position - change.previousPosition).getDistance() > 0f
+                                        }
+                                    val blockPan = !ui.scrollGesture && dragging
+                                    val blockPinch = !ui.zoomGesture && multiTouch
+                                    if (blockPan || blockPinch) {
+                                        event.changes.forEach { it.consume() }
+                                    }
+                                }
+                            }
+                        },
+            )
+        }
 
         if (mapReady) {
             markers.forEach { markerState ->

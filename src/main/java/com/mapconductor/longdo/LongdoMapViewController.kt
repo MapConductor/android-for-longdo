@@ -18,13 +18,11 @@ import com.mapconductor.core.map.MapCameraPosition
 import com.mapconductor.core.map.MapGesture
 import com.mapconductor.core.map.MapUISettings
 import com.mapconductor.core.map.MapUISettingsDiagnostics
-import com.mapconductor.core.map.MutableMapServiceRegistry
 import com.mapconductor.core.marker.MarkerCapableInterface
 import com.mapconductor.core.marker.MarkerEventControllerInterface
 import com.mapconductor.core.marker.MarkerOverlayRendererInterface
 import com.mapconductor.core.marker.MarkerRenderingStrategyInterface
 import com.mapconductor.core.marker.MarkerRenderingSupport
-import com.mapconductor.core.marker.MarkerRenderingSupportKey
 import com.mapconductor.core.marker.MarkerState
 import com.mapconductor.core.marker.MarkerTilingOptions
 import com.mapconductor.core.marker.OnMarkerEventHandler
@@ -37,6 +35,7 @@ import com.mapconductor.core.polyline.OnPolylineEventHandler
 import com.mapconductor.core.polyline.PolylineCapableInterface
 import com.mapconductor.core.polyline.PolylineEvent
 import com.mapconductor.core.polyline.PolylineState
+import com.mapconductor.core.raster.RasterHeaderRuleSet
 import com.mapconductor.core.raster.RasterLayerCapableInterface
 import com.mapconductor.core.raster.RasterLayerSource
 import com.mapconductor.core.raster.RasterLayerState
@@ -165,13 +164,12 @@ class LongdoMapViewController(
     private var latestOverlayCamera: MapCameraPosition? = null
 
     /**
-     * マーカークラスタリング等のプラグインが参照するサービスレジストリ。[MarkerRenderingSupport] を登録し、
-     * [LongdoMapView] が `LocalMapServiceRegistry` として供給する。
+     * マーカークラスタリング等のプラグインが解決する capability。
+     *
+     * レジストリはこのコントローラではなく **state が持つ**（react-sdk / ios-sdk と同じ）。
+     * [LongdoMapView] がコントローラ生成時に `state.serviceRegistry` へ登録する。
      */
-    val serviceRegistry: MutableMapServiceRegistry =
-        MutableMapServiceRegistry().apply {
-            put(MarkerRenderingSupportKey, createMarkerRenderingSupport())
-        }
+    val markerRenderingSupport: MarkerRenderingSupport<Any> = createMarkerRenderingSupport()
 
     private fun createMarkerRenderingSupport(): MarkerRenderingSupport<Any> =
         object : MarkerRenderingSupport<Any> {
@@ -458,6 +456,7 @@ class LongdoMapViewController(
     override fun hasRasterLayer(state: RasterLayerState): Boolean = appliedRasters.containsKey(state.id)
 
     private fun applyRaster(state: RasterLayerState) {
+        RasterHeaderRuleSet.warnUnsupported(provider = "Longdo", state = state)
         val srcId = rasterSourceId(state.id)
         val layerId = rasterLayerId(state.id)
         val spec = rasterSourceSpec(state.source) ?: return // 未対応ソースはスキップ

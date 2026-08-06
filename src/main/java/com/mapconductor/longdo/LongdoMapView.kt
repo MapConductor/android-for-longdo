@@ -48,6 +48,7 @@ import com.mapconductor.core.map.LocalMapViewController
 import com.mapconductor.core.map.MapCameraPosition
 import com.mapconductor.core.map.VisibleRegion
 import com.mapconductor.core.marker.MarkerCapableInterface
+import com.mapconductor.core.marker.MarkerRenderingSupportKey
 import com.mapconductor.core.marker.MarkerState
 import com.mapconductor.core.polygon.PolygonCapableInterface
 import com.mapconductor.core.polyline.PolylineCapableInterface
@@ -123,8 +124,21 @@ fun LongdoMapView(
         }
     val controller =
         remember(longdoMap) {
-            LongdoMapViewController(LongdoMapViewHolder(longdoMap)).also { state.setController(it) }
+            LongdoMapViewController(LongdoMapViewHolder(longdoMap)).also {
+                state.setController(it)
+                // レジストリの持ち主は state（react-sdk / ios-sdk と同じ）。
+                // 登録は content の合成より前に済ませる必要がある — MarkerClusterGroup は
+                // 未登録ならその場で return し、レジストリは Compose の state ではないので
+                // 後から入れても再合成が走らない。
+                state.serviceRegistry.put(MarkerRenderingSupportKey, it.markerRenderingSupport)
+            }
         }
+
+    // このプロバイダは MapViewBase を通らないので、登録の取り下げもここで行う。
+    // `clear()` ではなく `remove()` なのは他の capability を巻き添えにしないため。
+    DisposableEffect(state) {
+        onDispose { state.serviceRegistry.remove(MarkerRenderingSupportKey) }
+    }
 
     // markerTiling 指定時（多数マーカー）はマーカータイリング（ラスターレイヤ）経路で描画する。
     controller.useMarkerLayer = markerTiling != null
@@ -142,8 +156,6 @@ fun LongdoMapView(
 
     val overlayScope = remember { LongdoMapViewScope() }
     val registry = remember(overlayScope) { overlayScope.buildRegistry() }
-    // マーカークラスタリング（android-marker-clustering）が参照するサービスレジストリ。
-    val serviceRegistry = controller.serviceRegistry
     val overlayState = remember { LongdoOverlayState() }
 
     var mapReady by remember { mutableStateOf(false) }
@@ -319,7 +331,7 @@ fun LongdoMapView(
     content?.let { overlay ->
         CompositionLocalProvider(
             LocalMapOverlayRegistry provides registry,
-            LocalMapServiceRegistry provides serviceRegistry,
+            LocalMapServiceRegistry provides state.serviceRegistry,
             LocalMapViewController provides controller,
             LocalMarkerCollector provides overlayScope.markerCollector,
             LocalInfoBubbleCollector provides overlayScope.bubbleFlow,

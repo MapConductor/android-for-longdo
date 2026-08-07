@@ -1,9 +1,5 @@
 package com.mapconductor.longdo
 
-import android.annotation.SuppressLint
-import android.os.Handler
-import android.os.Looper
-import android.view.ViewGroup
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -53,10 +49,14 @@ import com.mapconductor.core.marker.MarkerState
 import com.mapconductor.core.polygon.PolygonCapableInterface
 import com.mapconductor.core.polyline.PolylineCapableInterface
 import com.mapconductor.core.raster.RasterLayerCapableInterface
-import kotlin.math.roundToInt
-import kotlinx.coroutines.delay
 import org.json.JSONArray
 import org.json.JSONObject
+import kotlin.math.roundToInt
+import android.annotation.SuppressLint
+import android.os.Handler
+import android.os.Looper
+import android.view.ViewGroup
+import kotlinx.coroutines.delay
 
 /**
  * Longdo Map の地図を表示する Composable。他プロバイダの `*MapView` と同じ引数体系を持ち、

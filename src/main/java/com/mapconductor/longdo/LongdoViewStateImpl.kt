@@ -6,7 +6,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import com.mapconductor.compose.map.BaseMapViewSaver
-import com.mapconductor.core.controller.OverlayControllerInterface
 import com.mapconductor.core.features.GeoPoint
 import com.mapconductor.core.features.GeoRectBounds
 import com.mapconductor.core.map.MapCameraPosition
@@ -84,8 +83,6 @@ class LongdoViewState(
     }
 
     override fun getMapViewHolder(): LongdoMapViewHolder? = controller?.holder as? LongdoMapViewHolder
-
-    override fun getControllers(): Map<String, OverlayControllerInterface<*, *>>? = controller?.getControllers()
 }
 
 /**

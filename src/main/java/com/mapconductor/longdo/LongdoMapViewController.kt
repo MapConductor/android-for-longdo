@@ -5,7 +5,6 @@ import com.mapconductor.core.circle.CircleCapableInterface
 import com.mapconductor.core.circle.CircleState
 import com.mapconductor.core.circle.OnCircleEventHandler
 import com.mapconductor.core.controller.BaseMapViewController
-import com.mapconductor.core.controller.OverlayControllerInterface
 import com.mapconductor.core.features.GeoRectBounds
 import com.mapconductor.core.groundimage.GroundImageCapableInterface
 import com.mapconductor.core.groundimage.GroundImageState
@@ -401,14 +400,6 @@ class LongdoMapViewController(
         markerTileRenderer = null
         super.destroy()
     }
-
-    override fun getControllers(): Map<String, OverlayControllerInterface<*, *>> =
-        mapOf(
-            "polyline" to polylineController,
-            "polygon" to polygonController,
-            "ground_image" to groundImageController,
-            "circle" to circleController,
-        )
 
     companion object {
         /**

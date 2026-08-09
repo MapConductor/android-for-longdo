@@ -43,6 +43,7 @@ import com.mapconductor.core.map.LocalMapServiceRegistry
 import com.mapconductor.core.map.LocalMapViewController
 import com.mapconductor.core.map.MapCameraPosition
 import com.mapconductor.core.map.MapCapability
+import com.mapconductor.core.map.MapCapabilityStatus
 import com.mapconductor.core.map.MapServiceRegistrations
 import com.mapconductor.core.map.VisibleRegion
 import com.mapconductor.core.marker.MarkerCapableInterface
@@ -135,15 +136,21 @@ fun LongdoMapView(
                 // 後から入れても再合成が走らない。
                 registrations += state.serviceRegistry.register(MarkerRenderingSupportKey, it.markerRenderingSupport)
 
-                // Longdo は WebView（Longdo Map JS API3）ブリッジ越しの実装で、任意点の
-                // 同期 project / unproject を持たない（[LongdoMapViewHolder] を参照）。
-                // これを宣言しておかないと、スクリーン空間を要求する機能
-                // （InfoBubble・マーカーアニメーション・タイル方式マーカーのヒットテスト）が
-                // 理由の分からないまま無反応になる。
+                // Longdo の [LongdoMapViewHolder] は同期の project / unproject を持たない
+                // （WebView ブリッジ越しのため null を返す）。ただしオーバーレイの配置は
+                // JS 側の `map.Renderer.project` を使う独自経路で行っており、InfoBubble も
+                // マーカーも実際に動く（実機確認済み）。
+                //
+                // よって Unsupported ではなく Degraded。Unsupported にすると
+                // [ScreenProjectionRequirement] がスクリーン空間の機能を落としてしまい、
+                // 動いているものを止めることになる。
                 registrations +=
-                    state.serviceRegistry.declareUnsupported(
+                    state.serviceRegistry.declare(
                         MapCapability.ScreenProjectionSync,
-                        "Longdo runs on a WebView bridge with no synchronous project/unproject",
+                        MapCapabilityStatus.Degraded(
+                            "the holder API has no synchronous conversion; overlays are placed " +
+                                "through the Longdo JS bridge instead",
+                        ),
                     )
             }
         }

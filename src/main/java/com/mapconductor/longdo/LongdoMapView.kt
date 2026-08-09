@@ -242,13 +242,13 @@ fun LongdoMapView(
         onLoaded?.invoke(currentState)
     }
     bridge.onMapClick = { point, zoom ->
-        // まず地図タップ（例: 選択解除）を通知し、続いてタイリング・マーカー／ポリラインのヒットテストを行う。
-        onClick?.invoke(point)
-        controller.handleMarkerTap(point, zoom)
-        controller.handlePolylineTap(point)
-        controller.handlePolygonTap(point)
-        controller.handleGroundImageTap(point)
-        controller.handleCircleTap(point)
+        // marker → circle → groundImage → polyline → polygon → map のカスケード。
+        // **必ずどれか 1 つだけ**が配送される（他プロバイダと同じ）。
+        // 順序と先勝ちはコアの dispatchOverlayTap が持つ。マーカーだけは Longdo の
+        // タイルレンダラでヒットテストするのでここで先に見る。
+        if (!controller.handleMarkerTap(point, zoom) && !controller.dispatchOverlayTap(point)) {
+            onClick?.invoke(point)
+        }
     }
     bridge.onCameraMove = cameraMove@{ lon, lat, zoom, bearing, tilt, bounds ->
         val base = currentState.cameraPosition

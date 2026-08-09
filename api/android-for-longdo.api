@@ -140,7 +140,7 @@ public final class com.mapconductor.longdo.LongdoMapViewControllerMarkerTilesKt 
   public static final void renderTiledMarkers(com.mapconductor.longdo.LongdoMapViewController, java.util.List<com.mapconductor.core.marker.MarkerState>);
   public static final void applyMarkerTileRaster(com.mapconductor.longdo.LongdoMapViewController, com.mapconductor.core.raster.RasterLayerState);
   public static final void removeMarkerTileRaster(com.mapconductor.longdo.LongdoMapViewController);
-  public static final void handleMarkerTap(com.mapconductor.longdo.LongdoMapViewController, com.mapconductor.core.features.GeoPoint, double);
+  public static final boolean handleMarkerTap(com.mapconductor.longdo.LongdoMapViewController, com.mapconductor.core.features.GeoPoint, double);
 }
 public final class com.mapconductor.longdo.LongdoMapViewControllerRasterKt {
   public static final void applyRaster(com.mapconductor.longdo.LongdoMapViewController, com.mapconductor.core.raster.RasterLayerState);
@@ -155,10 +155,6 @@ public final class com.mapconductor.longdo.LongdoMapViewControllerRasterKt {
   public static final java.lang.String rasterLayerId(com.mapconductor.longdo.LongdoMapViewController, java.lang.String);
 }
 public final class com.mapconductor.longdo.LongdoMapViewControllerTapsKt {
-  public static final void handlePolylineTap(com.mapconductor.longdo.LongdoMapViewController, com.mapconductor.core.features.GeoPointInterface);
-  public static final void handlePolygonTap(com.mapconductor.longdo.LongdoMapViewController, com.mapconductor.core.features.GeoPointInterface);
-  public static final void handleGroundImageTap(com.mapconductor.longdo.LongdoMapViewController, com.mapconductor.core.features.GeoPoint);
-  public static final void handleCircleTap(com.mapconductor.longdo.LongdoMapViewController, com.mapconductor.core.features.GeoPointInterface);
   public static final void applyGestureSettings(com.mapconductor.longdo.LongdoMapViewController, com.mapconductor.core.map.MapUISettings);
 }
 public final class com.mapconductor.longdo.LongdoMapViewHolder implements com.mapconductor.core.map.MapViewHolderInterface<com.longdo.sdk3.LongdoMap, com.longdo.sdk3.LongdoMap> {

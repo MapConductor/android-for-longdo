@@ -442,10 +442,8 @@ public final class com.mapconductor.longdo.polyline.LongdoPolylineOverlayRendere
   public java.lang.Object onPostProcess(kotlin.coroutines.Continuation<? super kotlin.Unit>);
   public final void reapply(java.util.List<com.mapconductor.longdo.polyline.LongdoPolylineHandle>);
 }
-public final class com.mapconductor.longdo.zoom.ZoomAltitudeConverter extends com.mapconductor.core.zoom.AbstractZoomAltitudeConverter {
+public final class com.mapconductor.longdo.zoom.ZoomAltitudeConverter extends com.mapconductor.core.zoom.WebMercatorZoomAltitudeConverter {
   public com.mapconductor.longdo.zoom.ZoomAltitudeConverter(double);
   public com.mapconductor.longdo.zoom.ZoomAltitudeConverter(double, int, kotlin.jvm.internal.DefaultConstructorMarker);
-  public double zoomLevelToAltitude(double, double, double);
-  public double altitudeToZoomLevel(double, double, double);
   public com.mapconductor.longdo.zoom.ZoomAltitudeConverter();
 }

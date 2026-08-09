@@ -2,7 +2,6 @@ package com.mapconductor.longdo
 
 import com.longdo.sdk3.LongdoMap
 import com.mapconductor.core.circle.CircleCapableInterface
-import com.mapconductor.core.circle.CircleState
 import com.mapconductor.core.circle.OnCircleEventHandler
 import com.mapconductor.core.controller.BaseMapViewController
 import com.mapconductor.core.features.GeoRectBounds
@@ -19,7 +18,6 @@ import com.mapconductor.core.marker.OnMarkerEventHandler
 import com.mapconductor.core.marker.StrategyMarkerController
 import com.mapconductor.core.polygon.OnPolygonEventHandler
 import com.mapconductor.core.polygon.PolygonCapableInterface
-import com.mapconductor.core.polygon.PolygonState
 import com.mapconductor.core.polyline.OnPolylineEventHandler
 import com.mapconductor.core.polyline.PolylineCapableInterface
 import com.mapconductor.core.polyline.PolylineState
@@ -292,14 +290,6 @@ class LongdoMapViewController(
     // 内部 MapLibre GL の `map.Renderer` への GeoJSON ソース＋line レイヤ反映）は [LongdoPolylineOverlayRenderer]
     // が担う。これにより他プロバイダ（MapTiler 等）と内部構造・タップ判定を一致させる。
 
-    override suspend fun compositionPolylines(data: List<PolylineState>) {
-        polylineController.add(data)
-    }
-
-    override suspend fun updatePolyline(state: PolylineState) {
-        polylineController.update(state)
-    }
-
     override fun hasPolyline(state: PolylineState): Boolean =
         polylineController.polylineManager.getEntity(state.id) != null
 
@@ -315,16 +305,6 @@ class LongdoMapViewController(
     // 担い、実際の描画（`map.Renderer` への GeoJSON ソース＋塗り／輪郭レイヤ反映）は [LongdoPolygonOverlayRenderer]
     // が担う。測地線ポリゴンでも描画曲線と一致した内外判定になるため、他プロバイダと同じ結果になる。
 
-    override suspend fun compositionPolygons(data: List<PolygonState>) {
-        polygonController.add(data)
-    }
-
-    override suspend fun updatePolygon(state: PolygonState) {
-        polygonController.update(state)
-    }
-
-    override fun hasPolygon(state: PolygonState): Boolean = polygonController.polygonManager.getEntity(state.id) != null
-
     @Deprecated("Use PolygonState.onClick instead.")
     override fun setOnPolygonClickListener(listener: OnPolygonEventHandler?) {
         polygonController.clickListener = listener
@@ -335,14 +315,6 @@ class LongdoMapViewController(
     // グラウンドイメージはコア基底 [com.mapconductor.core.groundimage.GroundImageController] が差分計算・状態管理・
     // クリック判定を担い、描画（`map.Renderer` への MapLibre image ソース＋ raster レイヤ反映）は
     // [LongdoGroundImageOverlayRenderer] が担う。MapLibre GL JS の image ソースが Longdo での最適な表現方法。
-
-    override suspend fun compositionGroundImages(data: List<GroundImageState>) {
-        groundImageController.add(data)
-    }
-
-    override suspend fun updateGroundImage(state: GroundImageState) {
-        groundImageController.update(state)
-    }
 
     override fun hasGroundImage(state: GroundImageState): Boolean =
         groundImageController.groundImageManager.getEntity(state.id) != null
@@ -357,16 +329,6 @@ class LongdoMapViewController(
     // 円はコア基底 [com.mapconductor.core.circle.CircleController] が差分計算・状態管理・クリック判定（中心からの
     // 距離 ≤ 半径＝緯度経度ベース）を担い、描画（`map.Renderer` への多角形リング GeoJSON ソース＋塗り／輪郭
     // レイヤ反映）は [LongdoCircleOverlayRenderer] が担う。MapLibre GL に円レイヤは無いため多角形近似で表現する。
-
-    override suspend fun compositionCircles(data: List<CircleState>) {
-        circleController.add(data)
-    }
-
-    override suspend fun updateCircle(state: CircleState) {
-        circleController.update(state)
-    }
-
-    override fun hasCircle(state: CircleState): Boolean = circleController.circleManager.getEntity(state.id) != null
 
     @Deprecated("Use CircleState.onClick instead.")
     override fun setOnCircleClickListener(listener: OnCircleEventHandler?) {

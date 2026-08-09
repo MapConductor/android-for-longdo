@@ -6,8 +6,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import com.mapconductor.compose.map.BaseMapViewSaver
-import com.mapconductor.core.features.GeoPoint
-import com.mapconductor.core.features.GeoRectBounds
 import com.mapconductor.core.map.MapCameraPosition
 import com.mapconductor.core.map.MapCameraPositionInterface
 import com.mapconductor.core.map.MapViewState
@@ -28,15 +26,11 @@ class LongdoViewState(
     mapDesignType: LongdoMapDesignTypeInterface,
     override val id: String,
     initialCameraPosition: MapCameraPosition = MapCameraPosition.Default,
-) : MapViewState<LongdoMapDesignTypeInterface>(),
+) : MapViewState<LongdoMapDesignTypeInterface>(initialCameraPosition),
     LongdoViewStateInterface {
-    private var _cameraPosition by mutableStateOf(initialCameraPosition)
     private var _mapDesignType by mutableStateOf(mapDesignType)
 
     private var controller: LongdoMapViewController? = null
-
-    override val cameraPosition: MapCameraPosition
-        get() = _cameraPosition
 
     override var mapDesignType: LongdoMapDesignTypeInterface
         get() = _mapDesignType
@@ -48,41 +42,17 @@ class LongdoViewState(
     /** MapView 生成時にコントローラを紐付ける。 */
     fun setController(controller: LongdoMapViewController) {
         this.controller = controller
+        // 初期カメラは LongdoMap.LOCATION として地図読み込み前に渡すので、接続時には移動しない。
+        attachController(controller, moveToInitialCamera = false)
     }
 
     /** 現在のカメラ位置を更新する（地図移動イベントからの反映用）。 */
     fun updateCameraPosition(position: MapCameraPosition) {
-        _cameraPosition = position
+        setCameraPositionInternal(position)
     }
 
-    override fun moveCameraTo(
-        cameraPosition: MapCameraPosition,
-        durationMillis: Long?,
-    ) {
-        _cameraPosition = cameraPosition
-        val ctrl = controller ?: return
-        if ((durationMillis ?: 0) > 0) {
-            ctrl.animateCamera(cameraPosition, durationMillis!!)
-        } else {
-            ctrl.moveCamera(cameraPosition)
-        }
-    }
-
-    override fun moveCameraTo(
-        position: GeoPoint,
-        durationMillis: Long?,
-    ) {
-        moveCameraTo(_cameraPosition.copy(position = position), durationMillis)
-    }
-
-    override fun fitBounds(
-        bounds: GeoRectBounds,
-        padding: Int,
-    ) {
-        controller?.fitBounds(bounds, padding)
-    }
-
-    override fun getMapViewHolder(): LongdoMapViewHolder? = controller?.holder as? LongdoMapViewHolder
+    /** 戻り型をこのプロバイダのホルダーへ絞る（アプリが `?.map` を取れる形を保つため）。 */
+    override fun getMapViewHolder(): LongdoMapViewHolder? = super.getMapViewHolder() as? LongdoMapViewHolder
 }
 
 /**

@@ -210,14 +210,10 @@ public final class com.mapconductor.longdo.LongdoViewState extends com.mapconduc
   public com.mapconductor.longdo.LongdoViewState(com.mapconductor.longdo.LongdoMapDesignTypeInterface, java.lang.String, com.mapconductor.core.map.MapCameraPosition);
   public com.mapconductor.longdo.LongdoViewState(com.mapconductor.longdo.LongdoMapDesignTypeInterface, java.lang.String, com.mapconductor.core.map.MapCameraPosition, int, kotlin.jvm.internal.DefaultConstructorMarker);
   public java.lang.String getId();
-  public com.mapconductor.core.map.MapCameraPosition getCameraPosition();
   public com.mapconductor.longdo.LongdoMapDesignTypeInterface getMapDesignType();
   public void setMapDesignType(com.mapconductor.longdo.LongdoMapDesignTypeInterface);
   public final void setController(com.mapconductor.longdo.LongdoMapViewController);
   public final void updateCameraPosition(com.mapconductor.core.map.MapCameraPosition);
-  public void moveCameraTo(com.mapconductor.core.map.MapCameraPosition, java.lang.Long);
-  public void moveCameraTo(com.mapconductor.core.features.GeoPoint, java.lang.Long);
-  public void fitBounds(com.mapconductor.core.features.GeoRectBounds, int);
   public com.mapconductor.longdo.LongdoMapViewHolder getMapViewHolder();
   public java.lang.Object getMapDesignType();
   public void setMapDesignType(java.lang.Object);

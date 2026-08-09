@@ -26,7 +26,12 @@ class LongdoViewState(
     mapDesignType: LongdoMapDesignTypeInterface,
     override val id: String,
     initialCameraPosition: MapCameraPosition = MapCameraPosition.Default,
-) : MapViewState<LongdoMapDesignTypeInterface>(initialCameraPosition),
+) : MapViewState<LongdoMapDesignTypeInterface>(
+        initialCameraPosition = initialCameraPosition,
+        // WebView ブリッジ越しでカメライベントの往復が遅い。楽観更新しないと、
+        // moveCameraTo の直後に cameraPosition を読んだとき古い値が返る。
+        optimisticCameraUpdate = true,
+    ),
     LongdoViewStateInterface {
     private var _mapDesignType by mutableStateOf(mapDesignType)
 

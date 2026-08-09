@@ -42,6 +42,8 @@ import com.mapconductor.core.map.LocalMapOverlayRegistry
 import com.mapconductor.core.map.LocalMapServiceRegistry
 import com.mapconductor.core.map.LocalMapViewController
 import com.mapconductor.core.map.MapCameraPosition
+import com.mapconductor.core.map.MapCapability
+import com.mapconductor.core.map.MapServiceRegistrations
 import com.mapconductor.core.map.VisibleRegion
 import com.mapconductor.core.marker.MarkerCapableInterface
 import com.mapconductor.core.marker.MarkerRenderingSupportKey
@@ -122,6 +124,7 @@ fun LongdoMapView(
                 addJavascriptInterface(bridge, BRIDGE_NAME)
             }
         }
+    val registrations = remember(state) { MapServiceRegistrations() }
     val controller =
         remember(longdoMap) {
             LongdoMapViewController(LongdoMapViewHolder(longdoMap)).also {
@@ -130,14 +133,25 @@ fun LongdoMapView(
                 // 登録は content の合成より前に済ませる必要がある — MarkerClusterGroup は
                 // 未登録ならその場で return し、レジストリは Compose の state ではないので
                 // 後から入れても再合成が走らない。
-                state.serviceRegistry.put(MarkerRenderingSupportKey, it.markerRenderingSupport)
+                registrations += state.serviceRegistry.register(MarkerRenderingSupportKey, it.markerRenderingSupport)
+
+                // Longdo は WebView（Longdo Map JS API3）ブリッジ越しの実装で、任意点の
+                // 同期 project / unproject を持たない（[LongdoMapViewHolder] を参照）。
+                // これを宣言しておかないと、スクリーン空間を要求する機能
+                // （InfoBubble・マーカーアニメーション・タイル方式マーカーのヒットテスト）が
+                // 理由の分からないまま無反応になる。
+                registrations +=
+                    state.serviceRegistry.declareUnsupported(
+                        MapCapability.ScreenProjectionSync,
+                        "Longdo runs on a WebView bridge with no synchronous project/unproject",
+                    )
             }
         }
 
     // このプロバイダは MapViewBase を通らないので、登録の取り下げもここで行う。
-    // `clear()` ではなく `remove()` なのは他の capability を巻き添えにしないため。
+    // 登録トークンでまとめて外すので、キー名を列挙する必要がない。
     DisposableEffect(state) {
-        onDispose { state.serviceRegistry.remove(MarkerRenderingSupportKey) }
+        onDispose { registrations.disposeAll() }
     }
 
     // markerTiling 指定時（多数マーカー）はマーカータイリング（ラスターレイヤ）経路で描画する。

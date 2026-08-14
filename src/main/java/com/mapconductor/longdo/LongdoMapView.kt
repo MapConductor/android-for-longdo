@@ -179,12 +179,12 @@ fun LongdoMapSurface(
                 // 後から入れても再合成が走らない。
                 registrations += state.serviceRegistry.register(MarkerRenderingSupportKey, it.markerRenderingSupport)
 
-                // Longdo の [LongdoMapViewHolder] は同期の project / unproject を持たない
-                // （WebView ブリッジ越しのため null を返す）。ただしオーバーレイの配置は
-                // JS 側の `map.Renderer.project` を使う独自経路で行っており、InfoBubble も
-                // マーカーも実際に動く（実機確認済み）。
+                // [LongdoMapViewHolder] は SDK のブリッジではなくコアの
+                // [WebMercatorScreenProjection] で同期変換する（Longdo の地図は
+                // Web Mercator なので、投影はカメラとビューの大きさだけで決まる）。
                 //
-                // よって Unsupported ではなく Degraded。Unsupported にすると
+                // 変換できるので Unsupported ではない。ただし tilt を掛けたときは
+                // 相似変換にならず誤差が出るので Degraded。Unsupported にすると
                 // [ScreenProjectionRequirement] がスクリーン空間の機能を落としてしまい、
                 // 動いているものを止めることになる。
                 onControllerReady?.invoke(it)
@@ -192,8 +192,8 @@ fun LongdoMapSurface(
                     state.serviceRegistry.declare(
                         MapCapability.ScreenProjectionSync,
                         MapCapabilityStatus.Degraded(
-                            "the holder API has no synchronous conversion; overlays are placed " +
-                                "through the Longdo JS bridge instead",
+                            "converted mathematically (Web Mercator around the camera); " +
+                                "accurate while tilt is 0",
                         ),
                     )
             }
@@ -205,9 +205,10 @@ fun LongdoMapSurface(
         onDispose { registrations.disposeAll() }
     }
 
-    // markerTiling 指定時（多数マーカー）はマーカータイリング（ラスターレイヤ）経路で描画する。
-    controller.useMarkerLayer = markerTiling != null
-    controller.markerTilingOptions = markerTiling
+    // タイル経路に倒すかはコントローラが件数を見て決める（他プロバイダと同じ規則）。
+    // ここで null を Default へ正規化するのも maplibre / googlemaps / here と揃えてある。
+    controller.markerTilingOptions =
+        markerTiling ?: com.mapconductor.core.marker.MarkerTilingOptions.Default
 
     // This provider builds its view itself rather than going through MapViewBase,
     // so the shared gesture dispatch has to be wired here.
@@ -281,6 +282,10 @@ fun LongdoMapSurface(
     // ブリッジのコールバックは最新の state / ユーザーコールバックを参照する。
     bridge.onReady = {
         controller.onMapReady()
+        // 投影はカメラが要る。カメラ**イベント**が来るまで null のままだと、地図を
+        // 一度も動かさないうちは InfoBubble もマーカー追従も出ない。ready の時点で
+        // 分かっているカメラを入れておく（イベントは配らない）。ios-for-longdo と同じ。
+        controller.setLatestOverlayCamera(currentState.cameraPosition)
         mapReady = true
         pushTargets()
         onLoaded?.invoke(currentState)

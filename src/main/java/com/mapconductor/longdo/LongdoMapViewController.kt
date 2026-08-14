@@ -104,6 +104,10 @@ class LongdoMapViewController(
         registerOverlayController(polygonController)
         registerOverlayController(groundImageController)
         registerOverlayController(circleController)
+        // ホルダーの投影にカメラを供給する。ホルダーはコントローラより先に作られるので
+        // ここで繋ぐ。これが無いと toScreenOffset が常に null を返し、InfoBubble と
+        // マーカー追従が理由も出ずに落ちる。
+        holder.cameraProvider = { latestOverlayCamera }
     }
 
     /**
@@ -120,14 +124,31 @@ class LongdoMapViewController(
     }
 
     /**
-     * true のとき、多数マーカーをマーカータイリング（ラスターレイヤ）で描画する。false（既定）では
+     * true のとき、多数マーカーをマーカータイリング（ラスターレイヤ）で描画する。false では
      * 少数の対話的マーカーをコンポーズオーバーレイ（[markers] フロー）として描画する。
-     * [LongdoMapView] が `markerTiling` の有無に応じて設定する。
+     *
+     * **直接触らないこと。** 切り替えは [shouldUseMarkerLayer] が件数を見て決める。
+     * このプロパティは互換のために残してある（外から true にすると常にタイル経路になる）。
      */
     var useMarkerLayer: Boolean = false
 
-    /** マーカータイリング設定（[useMarkerLayer] と併せて設定）。 */
+    /** マーカータイリング設定。null は [MarkerTilingOptions.Default] と同じ。 */
     var markerTilingOptions: MarkerTilingOptions? = null
+
+    /**
+     * マーカータイル経路を使うか。
+     *
+     * **他プロバイダと同じ規則にすること。** `MapLibreMarkerController` 等は
+     * `markerTiling.enabled && data.size >= minMarkerCount` で切り替える。
+     * 以前ここだけ「`markerTiling` が null でないか」で判定しており、
+     * タイリングを指定していないページでもタイル経路に倒れて、件数が
+     * しきい値未満だと**マーカーが 1 つも描かれない**状態になっていた。
+     */
+    private fun shouldUseMarkerLayer(count: Int): Boolean {
+        if (useMarkerLayer) return true
+        val options = markerTilingOptions ?: MarkerTilingOptions.Default
+        return options.enabled && count >= options.minMarkerCount
+    }
 
     internal var markerTileRenderer: LongdoMarkerTileRenderer? = null
 
@@ -223,7 +244,7 @@ class LongdoMapViewController(
     // --- MarkerCapableInterface ---
 
     override suspend fun compositionMarkers(data: List<MarkerState>) {
-        if (useMarkerLayer) {
+        if (shouldUseMarkerLayer(data.size)) {
             renderTiledMarkers(data)
         } else {
             _markers.value = data
@@ -231,7 +252,7 @@ class LongdoMapViewController(
     }
 
     override suspend fun updateMarker(state: MarkerState) {
-        if (useMarkerLayer) {
+        if (shouldUseMarkerLayer(markerTileRenderer?.markers?.size ?: _markers.value.size)) {
             val current = markerTileRenderer?.markers ?: return
             renderTiledMarkers(current.map { if (it.id == state.id) state else it })
         } else {
@@ -240,7 +261,7 @@ class LongdoMapViewController(
     }
 
     override fun hasMarker(state: MarkerState): Boolean =
-        if (useMarkerLayer) {
+        if (markerTileRenderer?.markers?.isNotEmpty() == true) {
             markerTileRenderer?.markers?.any { it.id == state.id } ?: false
         } else {
             _markers.value.any { it.id == state.id }

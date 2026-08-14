@@ -75,9 +75,51 @@ import kotlinx.coroutines.delay
  * @param onMapClick 地図タップ時に、タップ座標付きで呼ばれる。
  * @param onCameraMoveStart / onCameraMove / onCameraMoveEnd カメラ移動の各段階で呼ばれる。
  */
-@SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun LongdoMapView(
+    state: LongdoViewState,
+    modifier: Modifier = Modifier,
+    markerTiling: com.mapconductor.core.marker.MarkerTilingOptions? = null,
+    cameraRestriction: com.mapconductor.core.map.CameraRestriction? = null,
+    onMapLoaded: OnMapLoadedHandler? = null,
+    onMapClick: OnMapEventHandler? = null,
+    onMapLongClick: OnMapEventHandler? = null,
+    onCameraMoveStart: OnCameraMoveHandler? = null,
+    onCameraMove: OnCameraMoveHandler? = null,
+    onCameraMoveEnd: OnCameraMoveHandler? = null,
+    content: (@Composable MapViewScope.() -> Unit)? = null,
+) {
+    LongdoMapSurface(
+        state = state,
+        modifier = modifier,
+        markerTiling = markerTiling,
+        cameraRestriction = cameraRestriction,
+        onMapLoaded = onMapLoaded,
+        onMapClick = onMapClick,
+        onMapLongClick = onMapLongClick,
+        onCameraMoveStart = onCameraMoveStart,
+        onCameraMove = onCameraMove,
+        onCameraMoveEnd = onCameraMoveEnd,
+        content = content,
+    )
+}
+
+/**
+ * 地図と Compose オーバーレイの本体。
+ *
+ * Longdo は**マーカーと InfoBubble を地図SDKではなく Compose で描く**
+ * （WebView 越しの `Renderer.project` で得た画素位置に重ねる）。そのため
+ * Compose を通さないホスト（React Native）でもこの層は必要になる。
+ * `LongdoMapView` と `reactnative-for-longdo` の両方から使う。
+ *
+ * @param onControllerReady コントローラができた時点で 1 回だけ呼ばれる。
+ *   RN のホストはこれを受けて共通基底へ渡す。マーカーは
+ *   `controller.compositionMarkers()` 経由で `controller.markers` に載り、
+ *   このオーバーレイが描く。
+ */
+@SuppressLint("SetJavaScriptEnabled")
+@Composable
+fun LongdoMapSurface(
     state: LongdoViewState,
     modifier: Modifier = Modifier,
     markerTiling: com.mapconductor.core.marker.MarkerTilingOptions? = null,
@@ -88,6 +130,7 @@ fun LongdoMapView(
     onCameraMoveStart: OnCameraMoveHandler? = null,
     onCameraMove: OnCameraMoveHandler? = null,
     onCameraMoveEnd: OnCameraMoveHandler? = null,
+    onControllerReady: ((LongdoMapViewController) -> Unit)? = null,
     content: (@Composable MapViewScope.() -> Unit)? = null,
 ) {
     val context = LocalContext.current
@@ -144,6 +187,7 @@ fun LongdoMapView(
                 // よって Unsupported ではなく Degraded。Unsupported にすると
                 // [ScreenProjectionRequirement] がスクリーン空間の機能を落としてしまい、
                 // 動いているものを止めることになる。
+                onControllerReady?.invoke(it)
                 registrations +=
                     state.serviceRegistry.declare(
                         MapCapability.ScreenProjectionSync,

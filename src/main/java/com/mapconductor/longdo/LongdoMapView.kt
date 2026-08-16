@@ -609,14 +609,39 @@ private fun bindingScript(): String =
       try { map.Event.bind(longdo.EventName.Zoom, emitCamera); } catch (e) {}
       try { map.Event.bind(longdo.EventName.Rotate, emitCamera); } catch (e) {}
       try { map.Event.bind(longdo.EventName.Pitch, emitCamera); } catch (e) {}
+      // Longdo suppresses EventName.Click when its own polygon overlay is under the pointer.
+      // Renderer is the underlying MapLibre map and still receives that click, so bind there
+      // directly. Keep the public Longdo event only as a fallback for older SDK versions whose
+      // Renderer does not expose MapLibre's event API. Binding exactly one path also guarantees
+      // the shared marker -> shape -> map cascade runs only once.
+      var rendererClickBound = false;
       try {
-        map.Event.bind(longdo.EventName.Click, function () {
-          try {
-            var p = map.location(longdo.LocationMode.Pointer);
-            $BRIDGE_NAME.onClick(JSON.stringify({ lon: p.lon, lat: p.lat, zoom: map.zoom() }));
-          } catch (e) {}
-        });
+        if (map.Renderer && typeof map.Renderer.on === 'function') {
+          map.Renderer.on('click', function (event) {
+            try {
+              var p = event && event.lngLat;
+              if ((!p || typeof p.lng !== 'number' || typeof p.lat !== 'number') &&
+                  event && event.point && typeof map.Renderer.unproject === 'function') {
+                p = map.Renderer.unproject(event.point);
+              }
+              if (p && typeof p.lng === 'number' && typeof p.lat === 'number') {
+                $BRIDGE_NAME.onClick(JSON.stringify({ lon: p.lng, lat: p.lat, zoom: map.zoom() }));
+              }
+            } catch (e) {}
+          });
+          rendererClickBound = true;
+        }
       } catch (e) {}
+      if (!rendererClickBound) {
+        try {
+          map.Event.bind(longdo.EventName.Click, function () {
+            try {
+              var p = map.location(longdo.LocationMode.Pointer);
+              $BRIDGE_NAME.onClick(JSON.stringify({ lon: p.lon, lat: p.lat, zoom: map.zoom() }));
+            } catch (e) {}
+          });
+        } catch (e) {}
+      }
 
       // オーバーレイ投影：登録座標を map.Renderer.project で画面座標へ変換して通知する。
       window.__mcTargets = window.__mcTargets || [];

@@ -12,6 +12,8 @@ This module wraps the official [Longdo Map API3 SDK](https://map.longdo.com/docs
 
 ## Setup
 
+https://mapconductor.com/setup/android/longdo/
+
 The Longdo Map SDK is distributed from Longdo's Maven repository. Add it to your
 `settings.gradle.kts` (already configured in this monorepo's root `settings.gradle.kts`):
 
@@ -62,6 +64,197 @@ fun MapView(modifier: Modifier = Modifier) {
         onMapClick = { point -> /* tapped at point */ },
         onCameraMove = { camera -> /* camera moved */ },
     )
+}
+```
+
+## Components
+
+### LongdoMapView [[docs]](https://mapconductor.com/mapview/)
+
+```kotlin
+@Composable
+fun MapExample() {
+    val initCameraPosition = MapCameraPosition(
+        position = GeoPoint(
+            latitude = 34.091,
+            longitude = -117.886,
+        ),
+        zoom = 9.0,
+        tilt = 60.0,
+        bearing = 30.0,
+    )
+
+    val mapViewState = rememberLongdoMapViewState(
+        cameraPosition = initCameraPosition,
+    )
+
+    LongdoMapView(mapViewState)
+}
+```
+
+------------------------------------------------------------------------
+
+### Marker [[docs]](https://mapconductor.com/markers/)
+
+```kotlin
+@Composable
+fun MarkerExample() {
+    val markerState = remember { MarkerState(
+        position = GeoPoint(...),
+        icon = DefaultMarkerIcon().copy(
+            label = "Longdo",
+        ),
+        onClick = {
+            it.animate(MarkerAnimation.Bounce)
+        },
+    ) }
+
+    LongdoMapView(...) {
+        Marker(markerState)
+    }
+}
+```
+
+------------------------------------------------------------------------
+
+### InfoBubble [[docs]](https://mapconductor.com/info-bubble/)
+
+```kotlin
+@Composable
+fun InfoBubbleExample() {
+    var selectedMarker by remember { mutableStateOf<MarkerState?>(null) }
+
+    val markerState = remember { MarkerState(
+        ...,
+        onClick = {
+            selectedMarker = it
+        },
+    ) }
+
+    LongdoMapView(...) {
+        Marker(markerState)
+        selectedMarker?.let {
+            InfoBubble(
+                marker = it,
+            ) {
+                Text("Hello, world!")
+            }
+        }
+    }
+}
+```
+
+------------------------------------------------------------------------
+
+### Circle [[docs]](https://mapconductor.com/circle/)
+
+```kotlin
+@Composable
+fun CircleExample() {
+
+    val circleState = remember { CircleState(
+        center = GeoPoint(...),
+        radiusMeters = 50.0,
+        fillColor = Color.Blue.copy(alpha = 0.5f),
+        onClick = {
+            it.state.fillColor = Color.Red.copy(alpha = 0.5f)
+        }
+    ) }
+
+    LongdoMapView(...) {
+        Circle(circleState)
+    }
+}
+```
+
+------------------------------------------------------------------------
+
+### Polyline [[docs]](https://mapconductor.com/polyline/)
+
+```kotlin
+@Composable
+fun PolylineExample() {
+
+    val polylineState = remember { PolylineState(
+            points = airports,
+            strokeColor = Color.Blue.copy(alpha = 0.5f),
+            strokeWidth = 4.dp,
+            geodesic = true,
+        ) }
+
+    LongdoMapView(...) {
+        Polyline(polylineState)
+    }
+}
+```
+
+------------------------------------------------------------------------
+
+### Polygon [[docs]](https://mapconductor.com/polygon/)
+
+```kotlin
+@Composable
+fun PolygonExample() {
+
+    val polygonState = remember { PolygonState(
+        points = goryokaku,
+        strokeColor = Color.Blue.copy(alpha = 0.5f),
+        fillColor =  Color.Red.copy(alpha = 0.7f),
+    ) }
+
+    LongdoMapView(...) {
+        Polygon(polygonState)
+    }
+}
+```
+
+------------------------------------------------------------------------
+
+### Polygon Hole
+
+```kotlin
+@Composable
+fun PolygonHoleExample() {
+
+    val polygonState =
+        remember {
+            PolygonState(
+                points = listOf(...),
+                holes = listOf(
+                            listOf(...),
+                            listOf(...),
+                        ),
+                fillColor = Color(0xCC787880),
+                strokeColor = Color.Red,
+                strokeWidth = 2.dp,
+            )
+        }
+
+    LongdoMapView(...) {
+        Polygon(polygonState)
+    }
+}
+```
+
+------------------------------------------------------------------------
+
+### GroundImage [[docs]](https://mapconductor.com/ground-image/)
+
+```kotlin
+@Composable
+fun GroundImageExample() {
+    val groundImageState = remember { GroundImageState(
+        bounds = GeoRectBounds(
+            southWest = GeoPoint.fromLatLong(...),
+            northEast = GeoPoint.fromLatLong(...),
+        ),
+        image = image,
+        opacity = 0.5f,
+    ) }
+
+    LongdoMapView(state = mapViewState) {
+        GroundImage(groundImageState)
+    }
 }
 ```
 

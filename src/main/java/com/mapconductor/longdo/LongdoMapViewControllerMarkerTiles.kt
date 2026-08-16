@@ -88,12 +88,20 @@ internal fun LongdoMapViewController.removeMarkerTileRaster() {
 /**
  * タップ座標付近のタイリング・マーカーを [MarkerState.onClick] へ配送する。
  *
+ * クリックカスケードの先頭。マーカーが受け取ったら下のオーバーレイにも地図クリックにも
+ * 流さない（他プロバイダと同じ）。
+ *
  * @param point タップ座標。
  * @param nativeZoom Longdo ネイティブ（MapLibre）ズーム。
+ * @return マーカーがタップを消費したら true。
  */
 internal fun LongdoMapViewController.handleMarkerTap(
     point: com.mapconductor.core.features.GeoPoint,
     nativeZoom: Double,
-) {
-    markerTileRenderer?.findMarkerAt(point, nativeZoom)?.let { it.onClick?.invoke(it) }
+): Boolean {
+    val state = markerTileRenderer?.findMarkerAt(point, nativeZoom) ?: return false
+    // clickable = false のマーカーは透過させる（コアの clickableOnly と同じ方針）。
+    if (!state.clickable) return false
+    state.onClick?.invoke(state)
+    return true
 }

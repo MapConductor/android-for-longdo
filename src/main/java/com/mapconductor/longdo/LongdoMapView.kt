@@ -42,6 +42,9 @@ import com.mapconductor.core.map.LocalMapOverlayRegistry
 import com.mapconductor.core.map.LocalMapServiceRegistry
 import com.mapconductor.core.map.LocalMapViewController
 import com.mapconductor.core.map.MapCameraPosition
+import com.mapconductor.core.map.MapCapability
+import com.mapconductor.core.map.MapCapabilityStatus
+import com.mapconductor.core.map.MapServiceRegistrations
 import com.mapconductor.core.map.VisibleRegion
 import com.mapconductor.core.marker.MarkerCapableInterface
 import com.mapconductor.core.marker.MarkerRenderingSupportKey
@@ -72,9 +75,51 @@ import kotlinx.coroutines.delay
  * @param onMapClick 地図タップ時に、タップ座標付きで呼ばれる。
  * @param onCameraMoveStart / onCameraMove / onCameraMoveEnd カメラ移動の各段階で呼ばれる。
  */
-@SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun LongdoMapView(
+    state: LongdoViewState,
+    modifier: Modifier = Modifier,
+    markerTiling: com.mapconductor.core.marker.MarkerTilingOptions? = null,
+    cameraRestriction: com.mapconductor.core.map.CameraRestriction? = null,
+    onMapLoaded: OnMapLoadedHandler? = null,
+    onMapClick: OnMapEventHandler? = null,
+    onMapLongClick: OnMapEventHandler? = null,
+    onCameraMoveStart: OnCameraMoveHandler? = null,
+    onCameraMove: OnCameraMoveHandler? = null,
+    onCameraMoveEnd: OnCameraMoveHandler? = null,
+    content: (@Composable MapViewScope.() -> Unit)? = null,
+) {
+    LongdoMapSurface(
+        state = state,
+        modifier = modifier,
+        markerTiling = markerTiling,
+        cameraRestriction = cameraRestriction,
+        onMapLoaded = onMapLoaded,
+        onMapClick = onMapClick,
+        onMapLongClick = onMapLongClick,
+        onCameraMoveStart = onCameraMoveStart,
+        onCameraMove = onCameraMove,
+        onCameraMoveEnd = onCameraMoveEnd,
+        content = content,
+    )
+}
+
+/**
+ * 地図と Compose オーバーレイの本体。
+ *
+ * Longdo は**マーカーと InfoBubble を地図SDKではなく Compose で描く**
+ * （WebView 越しの `Renderer.project` で得た画素位置に重ねる）。そのため
+ * Compose を通さないホスト（React Native）でもこの層は必要になる。
+ * `LongdoMapView` と `reactnative-for-longdo` の両方から使う。
+ *
+ * @param onControllerReady コントローラができた時点で 1 回だけ呼ばれる。
+ *   RN のホストはこれを受けて共通基底へ渡す。マーカーは
+ *   `controller.compositionMarkers()` 経由で `controller.markers` に載り、
+ *   このオーバーレイが描く。
+ */
+@SuppressLint("SetJavaScriptEnabled")
+@Composable
+fun LongdoMapSurface(
     state: LongdoViewState,
     modifier: Modifier = Modifier,
     markerTiling: com.mapconductor.core.marker.MarkerTilingOptions? = null,
@@ -85,6 +130,7 @@ fun LongdoMapView(
     onCameraMoveStart: OnCameraMoveHandler? = null,
     onCameraMove: OnCameraMoveHandler? = null,
     onCameraMoveEnd: OnCameraMoveHandler? = null,
+    onControllerReady: ((LongdoMapViewController) -> Unit)? = null,
     content: (@Composable MapViewScope.() -> Unit)? = null,
 ) {
     val context = LocalContext.current
@@ -122,6 +168,7 @@ fun LongdoMapView(
                 addJavascriptInterface(bridge, BRIDGE_NAME)
             }
         }
+    val registrations = remember(state) { MapServiceRegistrations() }
     val controller =
         remember(longdoMap) {
             LongdoMapViewController(LongdoMapViewHolder(longdoMap)).also {
@@ -130,19 +177,38 @@ fun LongdoMapView(
                 // 登録は content の合成より前に済ませる必要がある — MarkerClusterGroup は
                 // 未登録ならその場で return し、レジストリは Compose の state ではないので
                 // 後から入れても再合成が走らない。
-                state.serviceRegistry.put(MarkerRenderingSupportKey, it.markerRenderingSupport)
+                registrations += state.serviceRegistry.register(MarkerRenderingSupportKey, it.markerRenderingSupport)
+
+                // [LongdoMapViewHolder] は SDK のブリッジではなくコアの
+                // [WebMercatorScreenProjection] で同期変換する（Longdo の地図は
+                // Web Mercator なので、投影はカメラとビューの大きさだけで決まる）。
+                //
+                // 変換できるので Unsupported ではない。ただし tilt を掛けたときは
+                // 相似変換にならず誤差が出るので Degraded。Unsupported にすると
+                // [ScreenProjectionRequirement] がスクリーン空間の機能を落としてしまい、
+                // 動いているものを止めることになる。
+                onControllerReady?.invoke(it)
+                registrations +=
+                    state.serviceRegistry.declare(
+                        MapCapability.ScreenProjectionSync,
+                        MapCapabilityStatus.Degraded(
+                            "converted mathematically (Web Mercator around the camera); " +
+                                "accurate while tilt is 0",
+                        ),
+                    )
             }
         }
 
     // このプロバイダは MapViewBase を通らないので、登録の取り下げもここで行う。
-    // `clear()` ではなく `remove()` なのは他の capability を巻き添えにしないため。
+    // 登録トークンでまとめて外すので、キー名を列挙する必要がない。
     DisposableEffect(state) {
-        onDispose { state.serviceRegistry.remove(MarkerRenderingSupportKey) }
+        onDispose { registrations.disposeAll() }
     }
 
-    // markerTiling 指定時（多数マーカー）はマーカータイリング（ラスターレイヤ）経路で描画する。
-    controller.useMarkerLayer = markerTiling != null
-    controller.markerTilingOptions = markerTiling
+    // タイル経路に倒すかはコントローラが件数を見て決める（他プロバイダと同じ規則）。
+    // ここで null を Default へ正規化するのも maplibre / googlemaps / here と揃えてある。
+    controller.markerTilingOptions =
+        markerTiling ?: com.mapconductor.core.marker.MarkerTilingOptions.Default
 
     // This provider builds its view itself rather than going through MapViewBase,
     // so the shared gesture dispatch has to be wired here.
@@ -216,18 +282,22 @@ fun LongdoMapView(
     // ブリッジのコールバックは最新の state / ユーザーコールバックを参照する。
     bridge.onReady = {
         controller.onMapReady()
+        // 投影はカメラが要る。カメラ**イベント**が来るまで null のままだと、地図を
+        // 一度も動かさないうちは InfoBubble もマーカー追従も出ない。ready の時点で
+        // 分かっているカメラを入れておく（イベントは配らない）。ios-for-longdo と同じ。
+        controller.setLatestOverlayCamera(currentState.cameraPosition)
         mapReady = true
         pushTargets()
         onLoaded?.invoke(currentState)
     }
     bridge.onMapClick = { point, zoom ->
-        // まず地図タップ（例: 選択解除）を通知し、続いてタイリング・マーカー／ポリラインのヒットテストを行う。
-        onClick?.invoke(point)
-        controller.handleMarkerTap(point, zoom)
-        controller.handlePolylineTap(point)
-        controller.handlePolygonTap(point)
-        controller.handleGroundImageTap(point)
-        controller.handleCircleTap(point)
+        // marker → circle → groundImage → polyline → polygon → map のカスケード。
+        // **必ずどれか 1 つだけ**が配送される（他プロバイダと同じ）。
+        // 順序と先勝ちはコアの dispatchOverlayTap が持つ。マーカーだけは Longdo の
+        // タイルレンダラでヒットテストするのでここで先に見る。
+        if (!controller.handleMarkerTap(point, zoom) && !controller.dispatchOverlayTap(point)) {
+            onClick?.invoke(point)
+        }
     }
     bridge.onCameraMove = cameraMove@{ lon, lat, zoom, bearing, tilt, bounds ->
         val base = currentState.cameraPosition
@@ -539,14 +609,39 @@ private fun bindingScript(): String =
       try { map.Event.bind(longdo.EventName.Zoom, emitCamera); } catch (e) {}
       try { map.Event.bind(longdo.EventName.Rotate, emitCamera); } catch (e) {}
       try { map.Event.bind(longdo.EventName.Pitch, emitCamera); } catch (e) {}
+      // Longdo suppresses EventName.Click when its own polygon overlay is under the pointer.
+      // Renderer is the underlying MapLibre map and still receives that click, so bind there
+      // directly. Keep the public Longdo event only as a fallback for older SDK versions whose
+      // Renderer does not expose MapLibre's event API. Binding exactly one path also guarantees
+      // the shared marker -> shape -> map cascade runs only once.
+      var rendererClickBound = false;
       try {
-        map.Event.bind(longdo.EventName.Click, function () {
-          try {
-            var p = map.location(longdo.LocationMode.Pointer);
-            $BRIDGE_NAME.onClick(JSON.stringify({ lon: p.lon, lat: p.lat, zoom: map.zoom() }));
-          } catch (e) {}
-        });
+        if (map.Renderer && typeof map.Renderer.on === 'function') {
+          map.Renderer.on('click', function (event) {
+            try {
+              var p = event && event.lngLat;
+              if ((!p || typeof p.lng !== 'number' || typeof p.lat !== 'number') &&
+                  event && event.point && typeof map.Renderer.unproject === 'function') {
+                p = map.Renderer.unproject(event.point);
+              }
+              if (p && typeof p.lng === 'number' && typeof p.lat === 'number') {
+                $BRIDGE_NAME.onClick(JSON.stringify({ lon: p.lng, lat: p.lat, zoom: map.zoom() }));
+              }
+            } catch (e) {}
+          });
+          rendererClickBound = true;
+        }
       } catch (e) {}
+      if (!rendererClickBound) {
+        try {
+          map.Event.bind(longdo.EventName.Click, function () {
+            try {
+              var p = map.location(longdo.LocationMode.Pointer);
+              $BRIDGE_NAME.onClick(JSON.stringify({ lon: p.lon, lat: p.lat, zoom: map.zoom() }));
+            } catch (e) {}
+          });
+        } catch (e) {}
+      }
 
       // オーバーレイ投影：登録座標を map.Renderer.project で画面座標へ変換して通知する。
       window.__mcTargets = window.__mcTargets || [];

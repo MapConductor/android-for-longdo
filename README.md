@@ -25,6 +25,8 @@ dependencyResolutionManagement {
 }
 ```
 
+### API key
+
 Add your Longdo Map API key. This module reads it from an `AndroidManifest.xml`
 `<meta-data>` entry (injected by the Secrets Gradle Plugin from `secrets.properties` /
 `LONGDO_API_KEY`):

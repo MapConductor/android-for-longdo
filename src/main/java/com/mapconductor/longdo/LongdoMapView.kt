@@ -38,6 +38,7 @@ import com.mapconductor.core.ResourceProvider
 import com.mapconductor.core.circle.CircleCapableInterface
 import com.mapconductor.core.features.GeoPoint
 import com.mapconductor.core.groundimage.GroundImageCapableInterface
+import com.mapconductor.core.map.CameraBearing
 import com.mapconductor.core.map.LocalMapOverlayRegistry
 import com.mapconductor.core.map.LocalMapServiceRegistry
 import com.mapconductor.core.map.LocalMapViewController
@@ -309,7 +310,7 @@ fun LongdoMapSurface(
             MapCameraPosition(
                 position = GeoPoint(latitude = lat, longitude = lon),
                 zoom = LongdoMapViewController.longdoZoomToCore(zoom),
-                bearing = bearing,
+                bearing = CameraBearing.bearingFromNativeHeading(bearing),
                 tilt = tilt,
                 paddings = base.paddings,
                 visibleRegion = region,

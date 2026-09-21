@@ -131,6 +131,7 @@ class LongdoMarkerTileRenderer(
                 cacheSizeBytes = markerTiling.cacheSize,
                 debugTileOverlay = markerTiling.debugTileOverlay,
                 iconScaleCallback = markerTiling.iconScaleCallback,
+                declutterPx = markerTiling.declutterPx,
             )
         tileRenderer = renderer
         tileServer.register(gid, renderer)

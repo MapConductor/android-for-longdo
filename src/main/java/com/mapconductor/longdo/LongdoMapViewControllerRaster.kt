@@ -93,6 +93,26 @@ internal fun LongdoMapViewController.addRasterJs(
     })()
     """.trimIndent()
 
+/**
+ * ベースレイヤ切替（= 内部スタイルの差し替え）のあとに、[rasters] を載せ直す JS。
+ *
+ * `style.load` で一度、保険に 1.5 秒後にもう一度。どちらも「無ければ足す」なので
+ * 二重にはならない。差し替え前に走った分は差し替えで消え、あとの分が残る。
+ */
+internal fun LongdoMapViewController.readdRastersAfterStyleSwapJs(rasters: List<RasterLayerState>): String {
+    val adds =
+        rasters.mapNotNull { state ->
+            val spec = rasterSourceSpec(state.source) ?: return@mapNotNull null
+            val srcId = rasterSourceId(state.id)
+            val layerId = rasterLayerId(state.id)
+            val layerSpec = rasterLayerSpec(layerId, srcId, state.opacity, state.visible)
+            "try{if(!m.getSource('$srcId'))m.addSource('$srcId',$spec);" +
+                "if(!m.getLayer('$layerId'))m.addLayer($layerSpec);}catch(e){}"
+        }.joinToString("")
+    return "(function(){var m=map.Renderer;if(!m)return;function re(){$adds}" +
+        "m.once('style.load',function(){setTimeout(re,0);});setTimeout(re,1500);})()"
+}
+
 internal fun LongdoMapViewController.removeRasterJs(id: String): String {
     val srcId = rasterSourceId(id)
     val layerId = rasterLayerId(id)

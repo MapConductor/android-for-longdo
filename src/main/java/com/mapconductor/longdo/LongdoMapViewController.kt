@@ -239,6 +239,10 @@ class LongdoMapViewController(
                 listOf(LongdoMap.LongdoStatic("Layers", value.layerName)),
             ) {}
         }
+        // ベース切替は内部 MapLibre のスタイル差し替えで、こちらが `map.Renderer` へ足した
+        // ソース／レイヤはそこで消える。新しいスタイルが載ったら載せ直す。
+        val rasters = appliedRasters.values.toList() + listOfNotNull(markerTileState)
+        if (rasters.isNotEmpty()) runRasterJs(readdRastersAfterStyleSwapJs(rasters))
     }
 
     // --- MarkerCapableInterface ---

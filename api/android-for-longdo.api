@@ -27,6 +27,7 @@ public final class com.mapconductor.longdo.LongdoDesign implements com.mapconduc
   public java.lang.Object getValue();
 }
 public final class com.mapconductor.longdo.LongdoDesign$Companion {
+  public final com.mapconductor.longdo.LongdoDesign getNone();
   public final com.mapconductor.longdo.LongdoDesign getNormal();
   public final com.mapconductor.longdo.LongdoDesign getEasy();
   public final com.mapconductor.longdo.LongdoDesign getPastel();

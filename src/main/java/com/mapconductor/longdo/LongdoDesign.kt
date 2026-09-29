@@ -30,6 +30,9 @@ data class LongdoDesign(
         // 以下は Longdo Map API3（`longdo.Layers`）が標準提供するベースレイヤ。
         // レイヤ名は SDK の `longdo.Layers` に実在するものを用いる（実行時列挙で検証済み）。
 
+        /** ベースマップ無し。`longdo.Layers.CLEAR`（何も載っていないベースレイヤ）。 */
+        val None = LongdoDesign("None", "CLEAR")
+
         /** 標準地図。 */
         val Normal = LongdoDesign("Normal", "NORMAL")
 
@@ -72,7 +75,7 @@ data class LongdoDesign(
         /** SDK が標準提供する全デザイン（[MapDesignMapPage] のセレクタで用いる）。 */
         val all: List<LongdoDesign> =
             listOf(
-                Normal, Easy, Pastel, PastelGray, Hard, Gray,
+                None, Normal, Easy, Pastel, PastelGray, Hard, Gray,
                 Light, Night, Dark, Political, Osm, Satellite, Hybrid,
             )
 

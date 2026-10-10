@@ -229,6 +229,11 @@ class LongdoMapViewController(
         dispatchCameraToOverlays()
         // Gesture JS issued before ready is dropped by the page; re-apply now.
         applyUISettings(appliedUISettings)
+        if (pendingMountedRasters.isNotEmpty()) {
+            val waiting = pendingMountedRasters.values.toList()
+            pendingMountedRasters.clear()
+            mainCoroutine.launch { waiting.forEach { applyRaster(it) } }
+        }
     }
 
     override fun setMapDesignType(value: LongdoMapDesignTypeInterface) {
@@ -295,15 +300,60 @@ class LongdoMapViewController(
 
     override suspend fun compositionRasterLayers(data: List<RasterLayerState>) {
         val newIds = data.map { it.id }.toSet()
-        appliedRasters.keys.filter { it !in newIds }.toList().forEach { id ->
-            runRasterJs(removeRasterJs(id))
-            appliedRasters.remove(id)
-        }
+        appliedRasters.keys
+            .filter { it !in newIds && it !in mountedRasterIds }
+            .toList()
+            .forEach { id ->
+                runRasterJs(removeRasterJs(id))
+                appliedRasters.remove(id)
+            }
         data.forEach { applyRaster(it) }
     }
 
+    /**
+     * content の外から載せたラスタの id。上の掃除から外すためにある。
+     *
+     * `compositionRasterLayers` は「アプリが宣言した集合」で全置換するので、
+     * 外から載せたものは次の再コンポーズで消える。他プロバイダでは
+     * [com.mapconductor.core.raster.RasterLayerController] の `upsert` が
+     * 同じ役割（`upsertedIds`）を持っている。
+     */
+    private val mountedRasterIds = mutableSetOf<String>()
+
+    /** [mountRasterLayer] が ready 前に受け取ったもの。 */
+    private val pendingMountedRasters = mutableMapOf<String, RasterLayerState>()
+
     override suspend fun updateRasterLayer(state: RasterLayerState) {
         applyRaster(state)
+    }
+
+    /**
+     * content の外から載せるラスタ（マーカータイル、ベクタースタイルのラスタ化）。
+     *
+     * 他プロバイダは [com.mapconductor.core.raster.RasterLayerController] を
+     * オーバーレイコントローラとして登録してあるので基底の実装で足りるが、
+     * Longdo は内部 MapLibre GL へ JS で直接足すのでそれが無い。
+     * id は [mountedRasterIds] に控えて composition の掃除から外す。
+     */
+    override fun mountRasterLayer(state: RasterLayerState) {
+        mountedRasterIds.add(state.id)
+        // ready 前に流した JS はページに捨てられる（`runRasterJs` は握りつぶす）。
+        // content 経由のラスタは composition が ready より後なので起きないが、
+        // ビューの外から載せるものは地図より先に来る。退避して [onMapReady] で出す。
+        if (!mapReady) {
+            pendingMountedRasters[state.id] = state
+            return
+        }
+        mainCoroutine.launch { applyRaster(state) }
+    }
+
+    override fun unmountRasterLayer(id: String) {
+        mountedRasterIds.remove(id)
+        pendingMountedRasters.remove(id)
+        mainCoroutine.launch {
+            runRasterJs(removeRasterJs(id))
+            appliedRasters.remove(id)
+        }
     }
 
     override fun hasRasterLayer(state: RasterLayerState): Boolean = appliedRasters.containsKey(state.id)

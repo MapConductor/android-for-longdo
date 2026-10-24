@@ -91,7 +91,9 @@ internal fun LongdoMapViewController.nativeCameraFor(position: MapCameraPosition
     // 高度は統一ズーム（Google）基準で算出する（Longdo ネイティブズームではない）。
     val altitude = zoomConverter.zoomLevelToAltitude(position.zoom, position.position.latitude, 0.0)
     val distanceForward = altitude * tan(tiltAbsRad)
-    val target = Spherical.computeOffset(position.position, distanceForward, CameraBearing.toNativeHeading(position.bearing))
+    val target =
+        Spherical
+            .computeOffset(position.position, distanceForward, CameraBearing.toNativeHeading(position.bearing))
     return NativeCamera(target, longdoZoom, tiltAbsDeg)
 }
 

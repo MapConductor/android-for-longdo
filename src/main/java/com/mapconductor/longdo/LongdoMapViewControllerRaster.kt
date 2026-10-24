@@ -101,14 +101,15 @@ internal fun LongdoMapViewController.addRasterJs(
  */
 internal fun LongdoMapViewController.readdRastersAfterStyleSwapJs(rasters: List<RasterLayerState>): String {
     val adds =
-        rasters.mapNotNull { state ->
-            val spec = rasterSourceSpec(state.source) ?: return@mapNotNull null
-            val srcId = rasterSourceId(state.id)
-            val layerId = rasterLayerId(state.id)
-            val layerSpec = rasterLayerSpec(layerId, srcId, state.opacity, state.visible)
-            "try{if(!m.getSource('$srcId'))m.addSource('$srcId',$spec);" +
-                "if(!m.getLayer('$layerId'))m.addLayer($layerSpec);}catch(e){}"
-        }.joinToString("")
+        rasters
+            .mapNotNull { state ->
+                val spec = rasterSourceSpec(state.source) ?: return@mapNotNull null
+                val srcId = rasterSourceId(state.id)
+                val layerId = rasterLayerId(state.id)
+                val layerSpec = rasterLayerSpec(layerId, srcId, state.opacity, state.visible)
+                "try{if(!m.getSource('$srcId'))m.addSource('$srcId',$spec);" +
+                    "if(!m.getLayer('$layerId'))m.addLayer($layerSpec);}catch(e){}"
+            }.joinToString("")
     return "(function(){var m=map.Renderer;if(!m)return;function re(){$adds}" +
         "m.once('style.load',function(){setTimeout(re,0);});setTimeout(re,1500);})()"
 }

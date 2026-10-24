@@ -46,6 +46,8 @@ import com.mapconductor.core.map.MapCameraPosition
 import com.mapconductor.core.map.MapCapability
 import com.mapconductor.core.map.MapCapabilityStatus
 import com.mapconductor.core.map.MapServiceRegistrations
+import com.mapconductor.core.map.MapViewStyle
+import com.mapconductor.core.map.MapViewStyleEffect
 import com.mapconductor.core.map.VisibleRegion
 import com.mapconductor.core.marker.MarkerCapableInterface
 import com.mapconductor.core.marker.MarkerRenderingSupportKey
@@ -88,6 +90,15 @@ fun LongdoMapView(
     onCameraMoveStart: OnCameraMoveHandler? = null,
     onCameraMove: OnCameraMoveHandler? = null,
     onCameraMoveEnd: OnCameraMoveHandler? = null,
+    /**
+     * How the map looks, when the app states it rather than naming a design.
+     *
+     * A vector style *is* the basemap. `com.mapconductor:vectorstyle` builds
+     * one; what happens underneath depends on this backend and the app does
+     * not have to know.
+     */
+    style: MapViewStyle? = null,
+    onStyleDiagnostics: ((List<String>) -> Unit)? = null,
     content: (@Composable MapViewScope.() -> Unit)? = null,
 ) {
     LongdoMapSurface(
@@ -101,6 +112,8 @@ fun LongdoMapView(
         onCameraMoveStart = onCameraMoveStart,
         onCameraMove = onCameraMove,
         onCameraMoveEnd = onCameraMoveEnd,
+        style = style,
+        onStyleDiagnostics = onStyleDiagnostics,
         content = content,
     )
 }
@@ -132,6 +145,15 @@ fun LongdoMapSurface(
     onCameraMove: OnCameraMoveHandler? = null,
     onCameraMoveEnd: OnCameraMoveHandler? = null,
     onControllerReady: ((LongdoMapViewController) -> Unit)? = null,
+    /**
+     * How the map looks, when the app states it rather than naming a design.
+     *
+     * A vector style *is* the basemap. `com.mapconductor:vectorstyle` builds
+     * one; what happens underneath depends on this backend and the app does
+     * not have to know.
+     */
+    style: MapViewStyle? = null,
+    onStyleDiagnostics: ((List<String>) -> Unit)? = null,
     content: (@Composable MapViewScope.() -> Unit)? = null,
 ) {
     val context = LocalContext.current
@@ -205,6 +227,16 @@ fun LongdoMapSurface(
     DisposableEffect(state) {
         onDispose { registrations.disposeAll() }
     }
+
+    // 同じ理由で、スタイルの設置もここで呼ぶ（MapViewBase を通るプロバイダは
+    // あちらで 1 回呼んでいる）。何が起きるかはバックエンドが宣言した能力で
+    // 決まるので、このプロバイダ固有の分岐は無い。
+    MapViewStyleEffect(
+        state = state,
+        style = style,
+        controller = controller,
+        onDiagnostics = onStyleDiagnostics,
+    )
 
     // タイル経路に倒すかはコントローラが件数を見て決める（他プロバイダと同じ規則）。
     // ここで null を Default へ正規化するのも maplibre / googlemaps / here と揃えてある。

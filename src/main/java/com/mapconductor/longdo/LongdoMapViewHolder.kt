@@ -2,9 +2,9 @@ package com.mapconductor.longdo
 
 import androidx.compose.ui.geometry.Offset
 import com.longdo.sdk3.LongdoMap
+import com.mapconductor.core.ResourceProvider
 import com.mapconductor.core.features.GeoPoint
 import com.mapconductor.core.features.GeoPointInterface
-import com.mapconductor.core.ResourceProvider
 import com.mapconductor.core.map.MapCameraPosition
 import com.mapconductor.core.map.MapViewHolderInterface
 import com.mapconductor.core.projection.WebMercatorScreenProjection

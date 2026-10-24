@@ -143,7 +143,7 @@ public final class com.mapconductor.longdo.LongdoMapViewControllerMarkerTilesKt 
   public static final void renderTiledMarkers(com.mapconductor.longdo.LongdoMapViewController, java.util.List<com.mapconductor.core.marker.MarkerState>);
   public static final void applyMarkerTileRaster(com.mapconductor.longdo.LongdoMapViewController, com.mapconductor.core.raster.RasterLayerState);
   public static final void removeMarkerTileRaster(com.mapconductor.longdo.LongdoMapViewController);
-  public static final boolean handleMarkerTap(com.mapconductor.longdo.LongdoMapViewController, com.mapconductor.core.features.GeoPoint, double);
+  public static final boolean handleMarkerTap(com.mapconductor.longdo.LongdoMapViewController, com.mapconductor.core.features.GeoPoint);
 }
 public final class com.mapconductor.longdo.LongdoMapViewControllerRasterKt {
   public static final void applyRaster(com.mapconductor.longdo.LongdoMapViewController, com.mapconductor.core.raster.RasterLayerState);
@@ -342,6 +342,7 @@ public final class com.mapconductor.longdo.marker.LongdoMarkerTileRenderer {
   public final com.mapconductor.core.raster.RasterLayerState render(java.util.List<com.mapconductor.core.marker.MarkerState>);
   public final java.lang.String getRasterLayerId();
   public final void clear();
+  public final com.mapconductor.core.marker.MarkerState findMarkerAt(com.mapconductor.core.features.GeoPointInterface, kotlin.jvm.functions.Function1<? super com.mapconductor.core.features.GeoPointInterface, androidx.compose.ui.geometry.Offset>);
   public final com.mapconductor.core.marker.MarkerState findMarkerAt(com.mapconductor.core.features.GeoPointInterface, double);
 }
 final class com.mapconductor.longdo.marker.LongdoMarkerTileRenderer$Companion {

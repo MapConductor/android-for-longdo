@@ -323,12 +323,12 @@ fun LongdoMapSurface(
         pushTargets()
         onLoaded?.invoke(currentState)
     }
-    bridge.onMapClick = { point, zoom ->
+    bridge.onMapClick = { point, _ ->
         // marker → circle → groundImage → polyline → polygon → map のカスケード。
         // **必ずどれか 1 つだけ**が配送される（他プロバイダと同じ）。
         // 順序と先勝ちはコアの dispatchOverlayTap が持つ。マーカーだけは Longdo の
         // タイルレンダラでヒットテストするのでここで先に見る。
-        if (!controller.handleMarkerTap(point, zoom) && !controller.dispatchOverlayTap(point)) {
+        if (!controller.handleMarkerTap(point) && !controller.dispatchOverlayTap(point)) {
             onClick?.invoke(point)
         }
     }

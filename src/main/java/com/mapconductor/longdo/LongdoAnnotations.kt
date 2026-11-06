@@ -67,7 +67,9 @@ internal fun LongdoMarkerOverlay(
     onDragMove: (marker: MarkerState, devicePx: Offset) -> Unit = { _, _ -> },
 ) {
     val density = LocalDensity.current.density
-    val bitmapIcon = remember(marker.icon) { (marker.icon ?: DefaultMarkerIcon()).toBitmapIcon() }
+    // URL の画像が届くと、アイコンは同じインスタンスのまま hashCode だけ変わる。それもキーにする。
+    val icon = marker.icon
+    val bitmapIcon = remember(icon, icon?.hashCode()) { (icon ?: DefaultMarkerIcon()).toBitmapIcon() }
     val widthPx = bitmapIcon.size.width
     val heightPx = bitmapIcon.size.height
     val anchor = bitmapIcon.anchor

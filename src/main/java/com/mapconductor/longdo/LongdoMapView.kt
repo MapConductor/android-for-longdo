@@ -530,6 +530,14 @@ fun LongdoMapSurface(
         onDispose {
             moveDispatcher.cancel()
             controller.destroy()
+            // The WebView is the map. Not destroyed, it keeps its renderer and
+            // the JS bridge, and through them the controller with every overlay.
+            // This runs for a configuration change too: the old Activity's
+            // WebView is never shown again (the state is what survives).
+            (longdoMap.parent as? ViewGroup)?.removeView(longdoMap)
+            longdoMap.removeJavascriptInterface(BRIDGE_NAME)
+            longdoMap.stopLoading()
+            longdoMap.destroy()
         }
     }
 }

@@ -31,6 +31,7 @@ import com.mapconductor.longdo.circle.LongdoCircleOverlayRenderer
 import com.mapconductor.longdo.groundimage.LongdoGroundImageController
 import com.mapconductor.longdo.groundimage.LongdoGroundImageOverlayRenderer
 import com.mapconductor.longdo.marker.LongdoMarkerTileRenderer
+import com.mapconductor.longdo.marker.MarkerIdIndex
 import com.mapconductor.longdo.polygon.LongdoPolygonController
 import com.mapconductor.longdo.polygon.LongdoPolygonOverlayRenderer
 import com.mapconductor.longdo.polyline.LongdoPolylineController
@@ -285,12 +286,17 @@ class LongdoMapViewController(
         }
     }
 
-    override fun hasMarker(state: MarkerState): Boolean =
-        if (markerTileRenderer?.markers?.isNotEmpty() == true) {
-            markerTileRenderer?.markers?.any { it.id == state.id } ?: false
+    override fun hasMarker(state: MarkerState): Boolean {
+        val tiled = markerTileRenderer?.markers
+        return if (tiled?.isNotEmpty() == true) {
+            tiledMarkerIds.contains(tiled, state.id)
         } else {
-            _markers.value.any { it.id == state.id }
+            overlayMarkerIds.contains(_markers.value, state.id)
         }
+    }
+
+    private val tiledMarkerIds = MarkerIdIndex()
+    private val overlayMarkerIds = MarkerIdIndex()
 
     @Deprecated("Use MarkerState.onDragStart instead.")
     override fun setOnMarkerDragStart(listener: OnMarkerEventHandler?) = Unit

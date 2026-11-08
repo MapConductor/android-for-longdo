@@ -151,6 +151,7 @@ public final class com.mapconductor.longdo.LongdoMapViewControllerRasterKt {
   public static final java.lang.String rasterSourceSpec(com.mapconductor.longdo.LongdoMapViewController, com.mapconductor.core.raster.RasterLayerSource);
   public static final java.lang.String rasterLayerSpec(com.mapconductor.longdo.LongdoMapViewController, java.lang.String, java.lang.String, float, boolean);
   public static final java.lang.String addRasterJs(com.mapconductor.longdo.LongdoMapViewController, java.lang.String, java.lang.String, java.lang.String, java.lang.String);
+  public static final java.lang.String addRasterJs(com.mapconductor.longdo.LongdoMapViewController, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String);
   public static final java.lang.String readdRastersAfterStyleSwapJs(com.mapconductor.longdo.LongdoMapViewController, java.util.List<com.mapconductor.core.raster.RasterLayerState>);
   public static final java.lang.String removeRasterJs(com.mapconductor.longdo.LongdoMapViewController, java.lang.String);
   public static final java.lang.String setRasterOpacityJs(com.mapconductor.longdo.LongdoMapViewController, java.lang.String, float);
@@ -189,6 +190,11 @@ final class com.mapconductor.longdo.LongdoMapViewSaver$Companion {
 }
 public final class com.mapconductor.longdo.LongdoMapViewScope extends com.mapconductor.compose.MapViewScope {
   public com.mapconductor.longdo.LongdoMapViewScope();
+}
+public final class com.mapconductor.longdo.LongdoOverlayStacking {
+  public static final com.mapconductor.longdo.LongdoOverlayStacking INSTANCE;
+  public final java.lang.String addLayerJs(java.lang.String, com.mapconductor.core.controller.OverlayKind, int);
+  public final java.lang.String addMarkerTileLayerJs(java.lang.String);
 }
 public final class com.mapconductor.longdo.LongdoOverlayState {
   public com.mapconductor.longdo.LongdoOverlayState();

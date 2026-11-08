@@ -42,7 +42,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * MapConductor コアと Longdo Map API3 SDK（[LongdoMap]）を橋渡しするマップコントローラ。
@@ -115,7 +117,9 @@ class LongdoMapViewController(
             PolygonTiler().apply {
                 onTemplate = { template, tileSize ->
                     if (template != null) {
-                        mountRasterLayer(polygonTileRasterLayerState(template, tileSize))
+                        // Returns once the tile layer is on the page's map: the tiled
+                        // polygons' onAdded is called on the return.
+                        mountRasterLayerOnMap(polygonTileRasterLayerState(template, tileSize))
                     } else {
                         unmountRasterLayer(POLYGON_TILE_LAYER_ID)
                     }
@@ -272,6 +276,8 @@ class LongdoMapViewController(
     override suspend fun compositionMarkers(data: List<MarkerState>) {
         if (shouldUseMarkerLayer(data.size)) {
             renderTiledMarkers(data)
+            // The tiled markers' onAdded waits for their tile layer (see [PageLayerWait]).
+            markerTileState?.let { longdoMap.awaitPageLayers(listOf(rasterLayerId(it.id))) }
         } else {
             _markers.value = data
         }
@@ -330,6 +336,9 @@ class LongdoMapViewController(
                 appliedRasters.remove(id)
             }
         data.forEach { applyRaster(it) }
+        // Returns once the layers are on the page's map, so their onAdded comes after
+        // (see [PageLayerWait]). A source Longdo cannot show is not applied, nor waited for.
+        longdoMap.awaitPageLayers(data.filter { it.id in appliedRasters }.map { rasterLayerId(it.id) })
     }
 
     /**
@@ -367,6 +376,27 @@ class LongdoMapViewController(
             return
         }
         mainCoroutine.launch { applyRaster(state) }
+    }
+
+    /**
+     * [mountRasterLayer] that returns once the layer is on the page's map, for
+     * the polygon tiles: the tiled polygons' `onAdded` is called on the return.
+     * [mountRasterLayer] only queues the script (and before `ready` only keeps
+     * the layer), so they were reported before the map had their tiles' layer.
+     * Applied here rather than launched, so that a replaced source is gone
+     * before the layer is looked for.
+     */
+    internal suspend fun mountRasterLayerOnMap(state: RasterLayerState) {
+        withContext(Dispatchers.Main.immediate) {
+            if (mapReady) {
+                mountedRasterIds.add(state.id)
+                applyRaster(state)
+            } else {
+                mountRasterLayer(state)
+                mapLoaded.first { it }
+            }
+        }
+        longdoMap.awaitPageLayers(listOf(rasterLayerId(state.id)))
     }
 
     override fun unmountRasterLayer(id: String) {

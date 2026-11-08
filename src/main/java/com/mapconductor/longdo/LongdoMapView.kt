@@ -530,6 +530,9 @@ fun LongdoMapSurface(
         onDispose {
             moveDispatcher.cancel()
             controller.destroy()
+            // No MapViewBase here to do it: the state (which the app keeps) must
+            // not hold on to the destroyed controller and its overlays.
+            state.detachController(controller)
             // The WebView is the map. Not destroyed, it keeps its renderer and
             // the JS bridge, and through them the controller with every overlay.
             // This runs for a configuration change too: the old Activity's

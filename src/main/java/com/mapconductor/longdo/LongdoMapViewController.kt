@@ -428,6 +428,8 @@ class LongdoMapViewController(
         circleController.clear()
         removeMarkerTileRaster()
         markerTileRenderer?.clear()
+        // 拡張モジュール（クラスタリングなど）が登録した Strategy のマーカーも消す。
+        clearStrategyMarkerControllers()
     }
 
     internal var appliedUISettings: MapUISettings = MapUISettings.Default

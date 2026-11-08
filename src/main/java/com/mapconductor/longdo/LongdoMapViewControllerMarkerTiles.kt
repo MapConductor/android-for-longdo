@@ -71,10 +71,12 @@ internal fun LongdoMapViewController.applyMarkerTileRaster(state: RasterLayerSta
     val prev = markerTileState
     val layerSpec = rasterLayerSpec(layerId, srcId, state.opacity, state.visible)
     when {
-        prev == null -> runRasterJs(addRasterJs(srcId, layerId, spec, layerSpec))
+        // マーカーのタイルはマーカーの帯（ポリライン等より上）。
+        prev == null ->
+            runRasterJs(addRasterJs(srcId, layerId, spec, layerSpec, LongdoOverlayStacking.addMarkerTileLayerJs(layerSpec)))
         prev.source != state.source -> {
             runRasterJs(removeRasterJs(state.id))
-            runRasterJs(addRasterJs(srcId, layerId, spec, layerSpec))
+            runRasterJs(addRasterJs(srcId, layerId, spec, layerSpec, LongdoOverlayStacking.addMarkerTileLayerJs(layerSpec)))
         }
     }
     markerTileState = state

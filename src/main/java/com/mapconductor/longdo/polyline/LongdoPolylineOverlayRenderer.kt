@@ -2,11 +2,13 @@ package com.mapconductor.longdo.polyline
 
 import androidx.compose.ui.graphics.toArgb
 import com.longdo.sdk3.LongdoMap
+import com.mapconductor.core.controller.OverlayKind
 import com.mapconductor.core.geometry.OverlayGeoJson
 import com.mapconductor.core.geometry.buildUnwrappedPolylinePath
 import com.mapconductor.core.polyline.PolylineEntityInterface
 import com.mapconductor.core.polyline.PolylineOverlayRendererInterface
 import com.mapconductor.core.polyline.PolylineState
+import com.mapconductor.longdo.LongdoOverlayStacking
 import org.json.JSONObject
 
 /**
@@ -52,8 +54,12 @@ class LongdoPolylineOverlayRenderer(
         handles.forEach { runJs(addLineJs(it)) }
     }
 
+    /** 層の id → zIndex（帯の中の順）。 */
+    private val zIndexByLayer = java.util.concurrent.ConcurrentHashMap<String, Int>()
+
     private fun addLine(state: PolylineState): LongdoPolylineHandle? {
         val feature = buildGeoJson(state) ?: return null
+        zIndexByLayer["polyline-layer-${state.id}"] = state.zIndex
         val argb = state.strokeColor.toArgb()
         val handle =
             LongdoPolylineHandle(
@@ -122,6 +128,8 @@ class LongdoPolylineOverlayRenderer(
                         .put("line-opacity", handle.opacity)
                         .put("line-width", handle.width),
                 ).toString()
+        // ポリラインの帯。
+        val layerAdd = LongdoOverlayStacking.addLayerJs(layerSpec, OverlayKind.Polyline, zIndexByLayer[handle.layerId] ?: 0)
         return """
             (function(){var m=map.Renderer; if(!m)return;
               var tries=0;
@@ -129,7 +137,7 @@ class LongdoPolylineOverlayRenderer(
                 try{
                   if(!m.getSource('${handle.sourceId}'))
                     m.addSource('${handle.sourceId}',{type:'geojson',data:${handle.featureJson}});
-                  if(!m.getLayer('${handle.layerId}'))m.addLayer($layerSpec);
+                  if(!m.getLayer('${handle.layerId}'))$layerAdd
                 }catch(e){ if(tries++<30)setTimeout(apply,150); }
               }
               apply();

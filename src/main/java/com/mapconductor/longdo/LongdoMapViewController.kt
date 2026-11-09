@@ -22,8 +22,11 @@ import com.mapconductor.core.polygon.PolygonCapableInterface
 import com.mapconductor.core.polygon.PolygonTiler
 import com.mapconductor.core.polygon.polygonTileRasterLayerState
 import com.mapconductor.core.polyline.OnPolylineEventHandler
+import com.mapconductor.core.polyline.POLYLINE_TILE_LAYER_ID
 import com.mapconductor.core.polyline.PolylineCapableInterface
 import com.mapconductor.core.polyline.PolylineState
+import com.mapconductor.core.polyline.PolylineTiler
+import com.mapconductor.core.polyline.polylineTileRasterLayerState
 import com.mapconductor.core.raster.RasterLayerCapableInterface
 import com.mapconductor.core.raster.RasterLayerState
 import com.mapconductor.longdo.circle.LongdoCircleController
@@ -122,6 +125,20 @@ class LongdoMapViewController(
                         mountRasterLayerOnMap(polygonTileRasterLayerState(template, tileSize))
                     } else {
                         unmountRasterLayer(POLYGON_TILE_LAYER_ID)
+                    }
+                }
+            }
+
+        // Many polylines too: the same raster layer path, in the polyline band.
+        polylineController.tiler =
+            PolylineTiler().apply {
+                onTemplate = { template, tileSize ->
+                    if (template != null) {
+                        // Returns once the tile layer is on the page's map: the tiled
+                        // polylines' onAdded is called on the return.
+                        mountRasterLayerOnMap(polylineTileRasterLayerState(template, tileSize))
+                    } else {
+                        unmountRasterLayer(POLYLINE_TILE_LAYER_ID)
                     }
                 }
             }

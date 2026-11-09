@@ -1,6 +1,7 @@
 package com.mapconductor.longdo
 
 import com.mapconductor.core.controller.OverlayKind
+import com.mapconductor.core.polygon.POLYGON_TILE_LAYER_ID
 import com.mapconductor.core.raster.RasterHeaderRuleSet
 import com.mapconductor.core.raster.RasterLayerSource
 import com.mapconductor.core.raster.RasterLayerState
@@ -40,7 +41,12 @@ internal fun LongdoMapViewController.applyRaster(state: RasterLayerState) {
 private fun rasterAddLayerJs(
     layerSpec: String,
     state: RasterLayerState,
-): String = LongdoOverlayStacking.addLayerJs(layerSpec, OverlayKind.RasterLayer, state.zIndex)
+): String =
+    if (state.id == POLYGON_TILE_LAYER_ID) {
+        LongdoOverlayStacking.addPolygonTileLayerJs(layerSpec)
+    } else {
+        LongdoOverlayStacking.addLayerJs(layerSpec, OverlayKind.RasterLayer, state.zIndex)
+    }
 
 internal fun LongdoMapViewController.runRasterJs(js: String) {
     runCatching { longdoMap.run(js) {} }
@@ -126,7 +132,7 @@ internal fun LongdoMapViewController.readdRastersAfterStyleSwapJs(rasters: List<
                     if (state.id == markerTileState?.id) {
                         LongdoOverlayStacking.addMarkerTileLayerJs(layerSpec)
                     } else {
-                        LongdoOverlayStacking.addLayerJs(layerSpec, OverlayKind.RasterLayer, state.zIndex)
+                        rasterAddLayerJs(layerSpec, state)
                     }
                 "try{if(!m.getSource('$srcId'))m.addSource('$srcId',$spec);" +
                     "if(!m.getLayer('$layerId'))$addLayer}catch(e){}"

@@ -38,7 +38,10 @@ class LongdoViewState(
     LongdoViewStateInterface {
     private var _mapDesignType by mutableStateOf(mapDesignType)
 
-    private var controller: LongdoMapViewController? = null
+    // Read through the base so that letting go of the controller there (MapViewBase
+    // does it when the map is torn down) leaves nothing behind here.
+    private val controller: LongdoMapViewController?
+        get() = attachedMapController as? LongdoMapViewController
 
     override var mapDesignType: LongdoMapDesignTypeInterface
         get() = _mapDesignType
@@ -49,7 +52,6 @@ class LongdoViewState(
 
     /** MapView 生成時にコントローラを紐付ける。 */
     fun setController(controller: LongdoMapViewController) {
-        this.controller = controller
         // 初期カメラは LongdoMap.LOCATION として地図読み込み前に渡すので、接続時には移動しない。
         attachController(controller, moveToInitialCamera = false)
     }

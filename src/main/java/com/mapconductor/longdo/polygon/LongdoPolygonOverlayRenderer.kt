@@ -2,12 +2,14 @@ package com.mapconductor.longdo.polygon
 
 import androidx.compose.ui.graphics.toArgb
 import com.longdo.sdk3.LongdoMap
+import com.mapconductor.core.controller.OverlayKind
 import com.mapconductor.core.geometry.OverlayGeoJson
 import com.mapconductor.core.geometry.buildUnwrappedPolygonRings
 import com.mapconductor.core.polygon.PolygonEntityInterface
 import com.mapconductor.core.polygon.PolygonOverlayRendererInterface
 import com.mapconductor.core.polygon.PolygonState
 import com.mapconductor.core.polygon.unionHoles
+import com.mapconductor.longdo.LongdoOverlayStacking
 import com.mapconductor.longdo.awaitPageLayers
 import org.json.JSONObject
 
@@ -65,8 +67,12 @@ class LongdoPolygonOverlayRenderer(
         handles.forEach { runJs(addPolygonJs(it)) }
     }
 
+    /** 層の id → zIndex（帯の中の順）。handle は公開型なので持たせずここで覚える。 */
+    private val zIndexByLayer = java.util.concurrent.ConcurrentHashMap<String, Int>()
+
     private fun addPolygon(state: PolygonState): LongdoPolygonHandle? {
         val feature = buildGeoJson(state) ?: return null
+        zIndexByLayer["polygon-fill-${state.id}"] = state.zIndex
         val fillArgb = state.fillColor.toArgb()
         val strokeArgb = state.strokeColor.toArgb()
         val handle =
@@ -149,6 +155,10 @@ class LongdoPolygonOverlayRenderer(
                         .put("line-opacity", handle.strokeOpacity)
                         .put("line-width", handle.strokeWidth),
                 ).toString()
+        // ポリゴンの帯。帯の中は zIndex の順、輪郭は塗りの直後。
+        val z = zIndexByLayer[handle.fillLayerId] ?: 0
+        val fillAdd = LongdoOverlayStacking.addLayerJs(fillSpec, OverlayKind.Polygon, z)
+        val lineAdd = LongdoOverlayStacking.addLayerJs(lineSpec, OverlayKind.Polygon, z)
         return """
             (function(){var m=map.Renderer; if(!m)return;
               var tries=0;
@@ -156,8 +166,8 @@ class LongdoPolygonOverlayRenderer(
                 try{
                   if(!m.getSource('${handle.sourceId}'))
                     m.addSource('${handle.sourceId}',{type:'geojson',data:${handle.featureJson}});
-                  if(!m.getLayer('${handle.fillLayerId}'))m.addLayer($fillSpec);
-                  if(!m.getLayer('${handle.lineLayerId}'))m.addLayer($lineSpec);
+                  if(!m.getLayer('${handle.fillLayerId}'))$fillAdd
+                  if(!m.getLayer('${handle.lineLayerId}'))$lineAdd
                 }catch(e){ if(tries++<30)setTimeout(apply,150); }
               }
               apply();

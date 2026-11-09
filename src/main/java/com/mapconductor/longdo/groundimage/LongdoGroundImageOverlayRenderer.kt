@@ -1,10 +1,12 @@
 package com.mapconductor.longdo.groundimage
 
 import com.longdo.sdk3.LongdoMap
+import com.mapconductor.core.controller.OverlayKind
 import com.mapconductor.core.features.GeoRectBounds
 import com.mapconductor.core.groundimage.GroundImageEntityInterface
 import com.mapconductor.core.groundimage.GroundImageOverlayRendererInterface
 import com.mapconductor.core.groundimage.GroundImageState
+import com.mapconductor.longdo.LongdoOverlayStacking
 import com.mapconductor.longdo.awaitPageLayers
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
@@ -155,6 +157,8 @@ class LongdoGroundImageOverlayRenderer(
                 .put("paint", JSONObject().put("raster-opacity", handle.opacity))
                 .put("layout", JSONObject().put("visibility", "visible"))
                 .toString()
+        // GroundImage の帯（ラスターの上、ポリゴンの下）。
+        val layerAdd = LongdoOverlayStacking.addLayerJs(layerSpec, OverlayKind.GroundImage)
         return """
             (function(){var m=map.Renderer; if(!m)return;
               var tries=0;
@@ -163,7 +167,7 @@ class LongdoGroundImageOverlayRenderer(
                   if(!m.getSource('${handle.sourceId}'))
                     m.addSource('${handle.sourceId}',
                       {type:'image',url:'${handle.imageUrl}',coordinates:${handle.coordinatesJson}});
-                  if(!m.getLayer('${handle.layerId}'))m.addLayer($layerSpec);
+                  if(!m.getLayer('${handle.layerId}'))$layerAdd
                 }catch(e){ if(tries++<30)setTimeout(apply,150); }
               }
               apply();

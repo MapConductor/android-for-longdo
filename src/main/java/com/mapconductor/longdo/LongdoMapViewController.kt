@@ -17,7 +17,10 @@ import com.mapconductor.core.marker.MarkerTilingOptions
 import com.mapconductor.core.marker.OnMarkerEventHandler
 import com.mapconductor.core.marker.StrategyMarkerController
 import com.mapconductor.core.polygon.OnPolygonEventHandler
+import com.mapconductor.core.polygon.POLYGON_TILE_LAYER_ID
 import com.mapconductor.core.polygon.PolygonCapableInterface
+import com.mapconductor.core.polygon.PolygonTiler
+import com.mapconductor.core.polygon.polygonTileRasterLayerState
 import com.mapconductor.core.polyline.OnPolylineEventHandler
 import com.mapconductor.core.polyline.PolylineCapableInterface
 import com.mapconductor.core.polyline.PolylineState
@@ -104,6 +107,19 @@ class LongdoMapViewController(
         registerOverlayController(polygonController)
         registerOverlayController(groundImageController)
         registerOverlayController(circleController)
+        // Many polygons are drawn as raster tiles. Longdo has no RasterLayer
+        // controller, so they are mounted like the marker tiles: outside the
+        // app's RasterLayer composition, which therefore never removes them.
+        polygonController.tiler =
+            PolygonTiler().apply {
+                onTemplate = { template, tileSize ->
+                    if (template != null) {
+                        mountRasterLayer(polygonTileRasterLayerState(template, tileSize))
+                    } else {
+                        unmountRasterLayer(POLYGON_TILE_LAYER_ID)
+                    }
+                }
+            }
         // ホルダーの投影にカメラを供給する。ホルダーはコントローラより先に作られるので
         // ここで繋ぐ。これが無いと toScreenOffset が常に null を返し、InfoBubble と
         // マーカー追従が理由も出ずに落ちる。

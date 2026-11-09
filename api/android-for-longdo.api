@@ -194,6 +194,7 @@ public final class com.mapconductor.longdo.LongdoMapViewScope extends com.mapcon
 public final class com.mapconductor.longdo.LongdoOverlayStacking {
   public static final com.mapconductor.longdo.LongdoOverlayStacking INSTANCE;
   public final java.lang.String addLayerJs(java.lang.String, com.mapconductor.core.controller.OverlayKind, int);
+  public final java.lang.String addPolygonTileLayerJs(java.lang.String);
   public final java.lang.String addMarkerTileLayerJs(java.lang.String);
 }
 public final class com.mapconductor.longdo.LongdoOverlayState {

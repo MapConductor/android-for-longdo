@@ -2,6 +2,7 @@ package com.mapconductor.longdo
 
 import com.mapconductor.core.controller.OverlayKind
 import com.mapconductor.core.polygon.POLYGON_TILE_LAYER_ID
+import com.mapconductor.core.polyline.POLYLINE_TILE_LAYER_ID
 import com.mapconductor.core.raster.RasterHeaderRuleSet
 import com.mapconductor.core.raster.RasterLayerSource
 import com.mapconductor.core.raster.RasterLayerState
@@ -44,6 +45,8 @@ private fun rasterAddLayerJs(
 ): String =
     if (state.id == POLYGON_TILE_LAYER_ID) {
         LongdoOverlayStacking.addPolygonTileLayerJs(layerSpec)
+    } else if (state.id == POLYLINE_TILE_LAYER_ID) {
+        LongdoOverlayStacking.addPolylineTileLayerJs(layerSpec)
     } else {
         LongdoOverlayStacking.addLayerJs(layerSpec, OverlayKind.RasterLayer, state.zIndex)
     }

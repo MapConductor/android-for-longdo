@@ -10,6 +10,7 @@ import com.mapconductor.core.polygon.PolygonOverlayRendererInterface
 import com.mapconductor.core.polygon.PolygonState
 import com.mapconductor.core.polygon.unionHoles
 import com.mapconductor.longdo.LongdoOverlayStacking
+import com.mapconductor.longdo.awaitPageLayers
 import org.json.JSONObject
 
 /**
@@ -23,9 +24,17 @@ import org.json.JSONObject
 class LongdoPolygonOverlayRenderer(
     private val longdoMap: LongdoMap,
 ) : PolygonOverlayRendererInterface<LongdoPolygonHandle> {
+    /**
+     * Returns once the layers are on the page's map, so the polygons'
+     * `onAdded` comes after they are (see [com.mapconductor.longdo.PageLayerWait]).
+     */
     override suspend fun onAdd(
         data: List<PolygonOverlayRendererInterface.AddParamsInterface>,
-    ): List<LongdoPolygonHandle?> = data.map { addPolygon(it.state) }
+    ): List<LongdoPolygonHandle?> {
+        val handles = data.map { addPolygon(it.state) }
+        longdoMap.awaitPageLayers(handles.filterNotNull().flatMap { listOf(it.fillLayerId, it.lineLayerId) })
+        return handles
+    }
 
     override suspend fun onChange(
         data: List<PolygonOverlayRendererInterface.ChangeParamsInterface<LongdoPolygonHandle>>,

@@ -9,6 +9,7 @@ import com.mapconductor.core.controller.OverlayKind
 import com.mapconductor.core.geometry.OverlayGeoJson
 import com.mapconductor.core.geometry.circleToRing
 import com.mapconductor.longdo.LongdoOverlayStacking
+import com.mapconductor.longdo.awaitPageLayers
 import org.json.JSONObject
 
 /**
@@ -23,9 +24,17 @@ import org.json.JSONObject
 class LongdoCircleOverlayRenderer(
     private val longdoMap: LongdoMap,
 ) : CircleOverlayRendererInterface<LongdoCircleHandle> {
+    /**
+     * Returns once the layers are on the page's map, so the circles'
+     * `onAdded` comes after they are (see [com.mapconductor.longdo.PageLayerWait]).
+     */
     override suspend fun onAdd(
         data: List<CircleOverlayRendererInterface.AddParamsInterface>,
-    ): List<LongdoCircleHandle?> = data.map { addCircle(it.state) }
+    ): List<LongdoCircleHandle?> {
+        val handles = data.map { addCircle(it.state) }
+        longdoMap.awaitPageLayers(handles.filterNotNull().flatMap { listOf(it.fillLayerId, it.lineLayerId) })
+        return handles
+    }
 
     override suspend fun onChange(
         data: List<CircleOverlayRendererInterface.ChangeParamsInterface<LongdoCircleHandle>>,

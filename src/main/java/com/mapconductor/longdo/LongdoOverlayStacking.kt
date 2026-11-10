@@ -33,6 +33,9 @@ internal object LongdoOverlayStacking {
     /** ポリゴンのタイル: ポリゴンの帯の一番下（画像になったポリゴンであって、地図の画像ではない）。 */
     fun addPolygonTileLayerJs(layerSpec: String): String = addLayerJs(layerSpec, OverlayKind.Polygon, Int.MIN_VALUE)
 
+    /** ポリラインのタイル: ポリラインの帯の一番下（サークルの上、ネイティブのポリラインの下）。 */
+    fun addPolylineTileLayerJs(layerSpec: String): String = addLayerJs(layerSpec, OverlayKind.Polyline, Int.MIN_VALUE)
+
     /** マーカーのタイル: マーカーの帯の一番下。 */
     fun addMarkerTileLayerJs(layerSpec: String): String = addLayerJs(layerSpec, OverlayKind.Marker, Int.MIN_VALUE)
 }

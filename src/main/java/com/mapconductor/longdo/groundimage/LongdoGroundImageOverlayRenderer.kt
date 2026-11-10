@@ -7,6 +7,7 @@ import com.mapconductor.core.groundimage.GroundImageEntityInterface
 import com.mapconductor.core.groundimage.GroundImageOverlayRendererInterface
 import com.mapconductor.core.groundimage.GroundImageState
 import com.mapconductor.longdo.LongdoOverlayStacking
+import com.mapconductor.longdo.awaitPageLayers
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import android.graphics.Bitmap
@@ -31,9 +32,17 @@ import android.util.Base64
 class LongdoGroundImageOverlayRenderer(
     private val longdoMap: LongdoMap,
 ) : GroundImageOverlayRendererInterface<LongdoGroundImageHandle> {
+    /**
+     * Returns once the layers are on the page's map, so the ground images'
+     * `onAdded` comes after they are (see [com.mapconductor.longdo.PageLayerWait]).
+     */
     override suspend fun onAdd(
         data: List<GroundImageOverlayRendererInterface.AddParamsInterface>,
-    ): List<LongdoGroundImageHandle?> = data.map { addGroundImage(it.state) }
+    ): List<LongdoGroundImageHandle?> {
+        val handles = data.map { addGroundImage(it.state) }
+        longdoMap.awaitPageLayers(handles.mapNotNull { it?.layerId })
+        return handles
+    }
 
     override suspend fun onChange(
         data: List<GroundImageOverlayRendererInterface.ChangeParamsInterface<LongdoGroundImageHandle>>,

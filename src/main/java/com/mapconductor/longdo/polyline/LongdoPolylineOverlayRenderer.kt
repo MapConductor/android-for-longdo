@@ -9,6 +9,7 @@ import com.mapconductor.core.polyline.PolylineEntityInterface
 import com.mapconductor.core.polyline.PolylineOverlayRendererInterface
 import com.mapconductor.core.polyline.PolylineState
 import com.mapconductor.longdo.LongdoOverlayStacking
+import com.mapconductor.longdo.awaitPageLayers
 import org.json.JSONObject
 
 /**
@@ -21,9 +22,17 @@ import org.json.JSONObject
 class LongdoPolylineOverlayRenderer(
     private val longdoMap: LongdoMap,
 ) : PolylineOverlayRendererInterface<LongdoPolylineHandle> {
+    /**
+     * Returns once the layers are on the page's map, so the polylines'
+     * `onAdded` comes after they are (see [com.mapconductor.longdo.PageLayerWait]).
+     */
     override suspend fun onAdd(
         data: List<PolylineOverlayRendererInterface.AddParamsInterface>,
-    ): List<LongdoPolylineHandle?> = data.map { addLine(it.state) }
+    ): List<LongdoPolylineHandle?> {
+        val handles = data.map { addLine(it.state) }
+        longdoMap.awaitPageLayers(handles.mapNotNull { it?.layerId })
+        return handles
+    }
 
     override suspend fun onChange(
         data: List<PolylineOverlayRendererInterface.ChangeParamsInterface<LongdoPolylineHandle>>,

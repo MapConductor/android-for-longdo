@@ -22,8 +22,11 @@ import com.mapconductor.core.polygon.PolygonCapableInterface
 import com.mapconductor.core.polygon.PolygonTiler
 import com.mapconductor.core.polygon.polygonTileRasterLayerState
 import com.mapconductor.core.polyline.OnPolylineEventHandler
+import com.mapconductor.core.polyline.POLYLINE_TILE_LAYER_ID
 import com.mapconductor.core.polyline.PolylineCapableInterface
 import com.mapconductor.core.polyline.PolylineState
+import com.mapconductor.core.polyline.PolylineTiler
+import com.mapconductor.core.polyline.polylineTileRasterLayerState
 import com.mapconductor.core.raster.RasterLayerCapableInterface
 import com.mapconductor.core.raster.RasterLayerState
 import com.mapconductor.longdo.circle.LongdoCircleController
@@ -31,6 +34,7 @@ import com.mapconductor.longdo.circle.LongdoCircleOverlayRenderer
 import com.mapconductor.longdo.groundimage.LongdoGroundImageController
 import com.mapconductor.longdo.groundimage.LongdoGroundImageOverlayRenderer
 import com.mapconductor.longdo.marker.LongdoMarkerTileRenderer
+import com.mapconductor.longdo.marker.MarkerIdIndex
 import com.mapconductor.longdo.polygon.LongdoPolygonController
 import com.mapconductor.longdo.polygon.LongdoPolygonOverlayRenderer
 import com.mapconductor.longdo.polyline.LongdoPolylineController
@@ -41,7 +45,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * MapConductor コアと Longdo Map API3 SDK（[LongdoMap]）を橋渡しするマップコントローラ。
@@ -114,9 +120,25 @@ class LongdoMapViewController(
             PolygonTiler().apply {
                 onTemplate = { template, tileSize ->
                     if (template != null) {
-                        mountRasterLayer(polygonTileRasterLayerState(template, tileSize))
+                        // Returns once the tile layer is on the page's map: the tiled
+                        // polygons' onAdded is called on the return.
+                        mountRasterLayerOnMap(polygonTileRasterLayerState(template, tileSize))
                     } else {
                         unmountRasterLayer(POLYGON_TILE_LAYER_ID)
+                    }
+                }
+            }
+
+        // Many polylines too: the same raster layer path, in the polyline band.
+        polylineController.tiler =
+            PolylineTiler().apply {
+                onTemplate = { template, tileSize ->
+                    if (template != null) {
+                        // Returns once the tile layer is on the page's map: the tiled
+                        // polylines' onAdded is called on the return.
+                        mountRasterLayerOnMap(polylineTileRasterLayerState(template, tileSize))
+                    } else {
+                        unmountRasterLayer(POLYLINE_TILE_LAYER_ID)
                     }
                 }
             }
@@ -271,6 +293,8 @@ class LongdoMapViewController(
     override suspend fun compositionMarkers(data: List<MarkerState>) {
         if (shouldUseMarkerLayer(data.size)) {
             renderTiledMarkers(data)
+            // The tiled markers' onAdded waits for their tile layer (see [PageLayerWait]).
+            markerTileState?.let { longdoMap.awaitPageLayers(listOf(rasterLayerId(it.id))) }
         } else {
             _markers.value = data
         }
@@ -285,12 +309,17 @@ class LongdoMapViewController(
         }
     }
 
-    override fun hasMarker(state: MarkerState): Boolean =
-        if (markerTileRenderer?.markers?.isNotEmpty() == true) {
-            markerTileRenderer?.markers?.any { it.id == state.id } ?: false
+    override fun hasMarker(state: MarkerState): Boolean {
+        val tiled = markerTileRenderer?.markers
+        return if (tiled?.isNotEmpty() == true) {
+            tiledMarkerIds.contains(tiled, state.id)
         } else {
-            _markers.value.any { it.id == state.id }
+            overlayMarkerIds.contains(_markers.value, state.id)
         }
+    }
+
+    private val tiledMarkerIds = MarkerIdIndex()
+    private val overlayMarkerIds = MarkerIdIndex()
 
     @Deprecated("Use MarkerState.onDragStart instead.")
     override fun setOnMarkerDragStart(listener: OnMarkerEventHandler?) = Unit
@@ -324,6 +353,9 @@ class LongdoMapViewController(
                 appliedRasters.remove(id)
             }
         data.forEach { applyRaster(it) }
+        // Returns once the layers are on the page's map, so their onAdded comes after
+        // (see [PageLayerWait]). A source Longdo cannot show is not applied, nor waited for.
+        longdoMap.awaitPageLayers(data.filter { it.id in appliedRasters }.map { rasterLayerId(it.id) })
     }
 
     /**
@@ -361,6 +393,27 @@ class LongdoMapViewController(
             return
         }
         mainCoroutine.launch { applyRaster(state) }
+    }
+
+    /**
+     * [mountRasterLayer] that returns once the layer is on the page's map, for
+     * the polygon tiles: the tiled polygons' `onAdded` is called on the return.
+     * [mountRasterLayer] only queues the script (and before `ready` only keeps
+     * the layer), so they were reported before the map had their tiles' layer.
+     * Applied here rather than launched, so that a replaced source is gone
+     * before the layer is looked for.
+     */
+    internal suspend fun mountRasterLayerOnMap(state: RasterLayerState) {
+        withContext(Dispatchers.Main.immediate) {
+            if (mapReady) {
+                mountedRasterIds.add(state.id)
+                applyRaster(state)
+            } else {
+                mountRasterLayer(state)
+                mapLoaded.first { it }
+            }
+        }
+        longdoMap.awaitPageLayers(listOf(rasterLayerId(state.id)))
     }
 
     override fun unmountRasterLayer(id: String) {

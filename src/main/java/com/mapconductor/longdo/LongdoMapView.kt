@@ -50,6 +50,7 @@ import com.mapconductor.core.map.MapViewStyle
 import com.mapconductor.core.map.MapViewStyleEffect
 import com.mapconductor.core.map.VisibleRegion
 import com.mapconductor.core.marker.MarkerCapableInterface
+import com.mapconductor.core.marker.MarkerDrawOrder
 import com.mapconductor.core.marker.MarkerRenderingSupportKey
 import com.mapconductor.core.marker.MarkerState
 import com.mapconductor.core.polygon.PolygonCapableInterface
@@ -412,7 +413,9 @@ fun LongdoMapSurface(
         }
 
         if (mapReady) {
-            markers.forEach { markerState ->
+            // 後に置いたものほど上に描かれる。zIndex が大きいほど、同じなら南・西ほど上
+            // （[MarkerDrawOrder]）。足した順には任せない。
+            markers.sortedBy { MarkerDrawOrder.of(it.zIndex, it.position) }.forEach { markerState ->
                 key(markerState.id) {
                     LongdoMarkerOverlay(
                         marker = markerState,

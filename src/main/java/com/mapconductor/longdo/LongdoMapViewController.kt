@@ -1,6 +1,9 @@
 package com.mapconductor.longdo
 
 import com.longdo.sdk3.LongdoMap
+import com.mapconductor.core.circle.CIRCLE_TILE_LAYER_ID
+import com.mapconductor.core.circle.CircleTiler
+import com.mapconductor.core.circle.circleTileRasterLayerState
 import com.mapconductor.core.circle.CircleCapableInterface
 import com.mapconductor.core.circle.OnCircleEventHandler
 import com.mapconductor.core.controller.BaseMapViewController
@@ -125,6 +128,20 @@ class LongdoMapViewController(
                         mountRasterLayerOnMap(polygonTileRasterLayerState(template, tileSize))
                     } else {
                         unmountRasterLayer(POLYGON_TILE_LAYER_ID)
+                    }
+                }
+            }
+
+        // Many circles too: the same raster layer path, in the circle band.
+        circleController.tiler =
+            CircleTiler().apply {
+                onTemplate = { template, tileSize ->
+                    if (template != null) {
+                        // Returns once the tile layer is on the page's map: the tiled
+                        // circles' onAdded is called on the return.
+                        mountRasterLayerOnMap(circleTileRasterLayerState(template, tileSize))
+                    } else {
+                        unmountRasterLayer(CIRCLE_TILE_LAYER_ID)
                     }
                 }
             }

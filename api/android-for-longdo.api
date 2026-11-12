@@ -123,7 +123,9 @@ public final class com.mapconductor.longdo.LongdoMapViewController extends com.m
 public final class com.mapconductor.longdo.LongdoMapViewController$Companion {
 }
 public final class com.mapconductor.longdo.LongdoMapViewControllerCameraKt {
+  public static final double LONGDO_VERTICAL_FOV;
   public static final boolean applyCameraRestrictionCorrectionIfNeeded(com.mapconductor.longdo.LongdoMapViewController, com.mapconductor.core.map.MapCameraPosition);
+  public static final double viewportHeightDp(com.mapconductor.longdo.LongdoMapViewController);
   public static final void handleMoveCamera(com.mapconductor.longdo.LongdoMapViewController, com.mapconductor.core.map.MapCameraPosition);
   public static final void handleAnimateCamera(com.mapconductor.longdo.LongdoMapViewController, com.mapconductor.core.map.MapCameraPosition, long);
   public static final void applyCamera(com.mapconductor.longdo.LongdoMapViewController, com.mapconductor.core.map.MapCameraPosition);

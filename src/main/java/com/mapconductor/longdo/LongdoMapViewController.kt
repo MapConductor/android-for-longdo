@@ -11,7 +11,10 @@ import com.mapconductor.core.features.GeoRectBounds
 import com.mapconductor.core.groundimage.GroundImageCapableInterface
 import com.mapconductor.core.groundimage.GroundImageState
 import com.mapconductor.core.groundimage.OnGroundImageEventHandler
+import com.mapconductor.core.map.CameraPaddingEmulation
 import com.mapconductor.core.map.MapCameraPosition
+import com.mapconductor.core.map.MapPaddings
+import com.mapconductor.core.map.MapPaddingsInterface
 import com.mapconductor.core.map.MapUISettings
 import com.mapconductor.core.marker.MarkerCapableInterface
 import com.mapconductor.core.marker.MarkerRenderingSupport
@@ -244,6 +247,14 @@ class LongdoMapViewController(
     /** 地図の準備完了フラグ。`ready` イベント（あるいは map オブジェクト生成）で true になる。 */
     @Volatile
     internal var mapReady: Boolean = false
+
+    /**
+     * 今カメラに付いているパディング（dp）。
+     *
+     * Longdo Map API3 にはパディングの口が無いので、カメラ中心をずらして再現し
+     * （[CameraPaddingEmulation]）、読むときに元へ戻すためにここで覚えておく。
+     */
+    internal var cameraPaddings: MapPaddingsInterface = MapPaddings.Zeros
 
     /** ready 前に要求された最後のカメラ位置。ready 時に適用する。 */
     internal var pendingCameraPosition: MapCameraPosition? = null

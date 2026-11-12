@@ -39,6 +39,7 @@ import com.mapconductor.core.circle.CircleCapableInterface
 import com.mapconductor.core.features.GeoPoint
 import com.mapconductor.core.groundimage.GroundImageCapableInterface
 import com.mapconductor.core.map.CameraBearing
+import com.mapconductor.core.map.CameraPaddingEmulation
 import com.mapconductor.core.map.LocalMapOverlayRegistry
 import com.mapconductor.core.map.LocalMapServiceRegistry
 import com.mapconductor.core.map.LocalMapViewController
@@ -333,19 +334,23 @@ fun LongdoMapSurface(
         }
     }
     bridge.onCameraMove = cameraMove@{ lon, lat, zoom, bearing, tilt, bounds ->
-        val base = currentState.cameraPosition
         val region =
             bounds?.let {
                 VisibleRegion(bounds = it, nearLeft = null, nearRight = null, farLeft = null, farRight = null)
             }
+        // Longdo が返す中心は画面中央。パディングを付けているなら、その中央の位置に直す。
         val updated =
-            MapCameraPosition(
-                position = GeoPoint(latitude = lat, longitude = lon),
-                zoom = LongdoMapViewController.longdoZoomToCore(zoom),
-                bearing = CameraBearing.bearingFromNativeHeading(bearing),
-                tilt = tilt,
-                paddings = base.paddings,
-                visibleRegion = region,
+            CameraPaddingEmulation.fromNativeCamera(
+                MapCameraPosition(
+                    position = GeoPoint(latitude = lat, longitude = lon),
+                    zoom = LongdoMapViewController.longdoZoomToCore(zoom),
+                    bearing = CameraBearing.bearingFromNativeHeading(bearing),
+                    tilt = tilt,
+                    visibleRegion = region,
+                ),
+                controller.cameraPaddings,
+                LONGDO_VERTICAL_FOV,
+                controller.viewportHeightDp(),
             )
         // 範囲・ズーム制限に違反していれば矩形内へ引き戻す（Longdo にはネイティブの範囲制限 API が
         // 無いため）。android-sdk の HERE/ArcGIS/TomTom と同じく、補正した回は state 更新も

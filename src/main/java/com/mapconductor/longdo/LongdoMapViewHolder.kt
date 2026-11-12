@@ -19,7 +19,8 @@ import com.mapconductor.core.projection.WebMercatorScreenProjection
  *
  * ブリッジは同期の座標変換 API を持たないが、Longdo の地図は Web Mercator なので
  * 投影はカメラとビューの大きさだけで決まる。式はコアの [WebMercatorScreenProjection]
- * にあり、ここはカメラとサイズを渡すだけ。**各所で式を書き直さないこと。**
+ * にあり、ここはカメラとサイズと視野角を渡すだけ。**各所で式を書き直さないこと。**
+ * 視野角を渡すので tilt も透視で扱う（渡さないと奥ほどずれ、tilt 60 で 250px 近くずれていた）。
  */
 class LongdoMapViewHolder(
     private val longdoMap: LongdoMap,
@@ -59,6 +60,7 @@ class LongdoMapViewHolder(
                 camera = camera,
                 widthPx = longdoMap.width / density,
                 heightPx = longdoMap.height / density,
+                fovDegrees = LONGDO_VERTICAL_FOV,
             ) ?: return null
         return Offset(offsetDp.x * density, offsetDp.y * density)
     }
@@ -75,6 +77,7 @@ class LongdoMapViewHolder(
             camera = camera,
             widthPx = longdoMap.width / density,
             heightPx = longdoMap.height / density,
+            fovDegrees = LONGDO_VERTICAL_FOV,
         )
     }
 }

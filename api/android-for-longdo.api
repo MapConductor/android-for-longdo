@@ -171,6 +171,9 @@ public final class com.mapconductor.longdo.LongdoMapViewHolder implements com.ma
   public androidx.compose.ui.geometry.Offset toScreenOffset-x-9fifI(com.mapconductor.core.features.GeoPointInterface);
   public com.mapconductor.core.features.GeoPoint fromScreenOffsetSync-k-4lQ0M(long);
   public java.lang.Object fromScreenOffset-3MmeM6k(long, kotlin.coroutines.Continuation<? super com.mapconductor.core.features.GeoPoint>);
+  public com.mapconductor.core.projection.ProjectedPoint toProjectedPoint(com.mapconductor.core.features.GeoPointInterface);
+  public com.mapconductor.core.features.GeoPoint fromProjectedPoint(com.mapconductor.core.projection.ProjectedPoint);
+  public com.mapconductor.core.projection.MapCoordinateSystem getCoordinateSystem();
   public java.lang.Object getMapView();
   public java.lang.Object getMap();
 }
@@ -197,6 +200,7 @@ public final class com.mapconductor.longdo.LongdoOverlayStacking {
   public static final com.mapconductor.longdo.LongdoOverlayStacking INSTANCE;
   public final java.lang.String addLayerJs(java.lang.String, com.mapconductor.core.controller.OverlayKind, int);
   public final java.lang.String addPolygonTileLayerJs(java.lang.String);
+  public final java.lang.String addCircleTileLayerJs(java.lang.String);
   public final java.lang.String addPolylineTileLayerJs(java.lang.String);
   public final java.lang.String addMarkerTileLayerJs(java.lang.String);
 }

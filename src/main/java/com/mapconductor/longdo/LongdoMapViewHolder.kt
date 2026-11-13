@@ -2,9 +2,10 @@ package com.mapconductor.longdo
 
 import androidx.compose.ui.geometry.Offset
 import com.longdo.sdk3.LongdoMap
+import com.mapconductor.core.ResourceProvider
 import com.mapconductor.core.features.GeoPoint
 import com.mapconductor.core.features.GeoPointInterface
-import com.mapconductor.core.ResourceProvider
+import com.mapconductor.core.map.CameraPaddingEmulation
 import com.mapconductor.core.map.MapCameraPosition
 import com.mapconductor.core.map.MapViewHolderInterface
 import com.mapconductor.core.projection.WebMercatorScreenProjection
@@ -18,7 +19,8 @@ import com.mapconductor.core.projection.WebMercatorScreenProjection
  *
  * ブリッジは同期の座標変換 API を持たないが、Longdo の地図は Web Mercator なので
  * 投影はカメラとビューの大きさだけで決まる。式はコアの [WebMercatorScreenProjection]
- * にあり、ここはカメラとサイズを渡すだけ。**各所で式を書き直さないこと。**
+ * にあり、ここはカメラとサイズと視野角を渡すだけ。**各所で式を書き直さないこと。**
+ * 視野角を渡すので tilt も透視で扱う（渡さないと奥ほどずれ、tilt 60 で 250px 近くずれていた）。
  */
 class LongdoMapViewHolder(
     private val longdoMap: LongdoMap,
@@ -33,6 +35,15 @@ class LongdoMapViewHolder(
     internal var cameraProvider: (() -> MapCameraPosition?)? = null
 
     /**
+     * 投影の中心にするカメラ。パディングを付けたカメラの position はパディング中央なので、
+     * 画面中央に来る点（ネイティブへ渡したカメラ中心）へ戻してから使う。
+     */
+    private fun screenCenteredCamera(heightDp: Float): MapCameraPosition? {
+        val camera = cameraProvider?.invoke() ?: return null
+        return CameraPaddingEmulation.toNativeCamera(camera, LONGDO_VERTICAL_FOV, heightDp.toDouble())
+    }
+
+    /**
      * 地理座標 → 画面座標（**端末ピクセル**）。カメラ未確定（地図の準備前）なら null。
      *
      * ホルダーの契約は端末ピクセル（MapLibre 等の `toScreenLocation` に合わせている）。
@@ -41,14 +52,15 @@ class LongdoMapViewHolder(
      * 中心からのずれが density 分だけ小さくなり、マーカーと吹き出しがずれる。
      */
     override fun toScreenOffset(position: GeoPointInterface): Offset? {
-        val camera = cameraProvider?.invoke() ?: return null
         val density = ResourceProvider.getDensity()
+        val camera = screenCenteredCamera(longdoMap.height / density) ?: return null
         val offsetDp =
             WebMercatorScreenProjection.toScreenOffset(
                 position = position,
                 camera = camera,
                 widthPx = longdoMap.width / density,
                 heightPx = longdoMap.height / density,
+                fovDegrees = LONGDO_VERTICAL_FOV,
             ) ?: return null
         return Offset(offsetDp.x * density, offsetDp.y * density)
     }
@@ -58,13 +70,14 @@ class LongdoMapViewHolder(
      * こちらを使う。非同期版は基底の既定実装がここへ委譲する。
      */
     override fun fromScreenOffsetSync(offset: Offset): GeoPoint? {
-        val camera = cameraProvider?.invoke() ?: return null
         val density = ResourceProvider.getDensity()
+        val camera = screenCenteredCamera(longdoMap.height / density) ?: return null
         return WebMercatorScreenProjection.fromScreenOffset(
             offset = Offset(offset.x / density, offset.y / density),
             camera = camera,
             widthPx = longdoMap.width / density,
             heightPx = longdoMap.height / density,
+            fovDegrees = LONGDO_VERTICAL_FOV,
         )
     }
 }

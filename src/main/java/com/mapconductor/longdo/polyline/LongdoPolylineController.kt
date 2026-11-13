@@ -14,8 +14,8 @@ class LongdoPolylineController(
     override val renderer: LongdoPolylineOverlayRenderer,
     polylineManager: PolylineManagerInterface<LongdoPolylineHandle> = PolylineManager(),
 ) : PolylineController<LongdoPolylineHandle>(polylineManager, renderer) {
-    /** 既知のポリラインを再適用する（地図 `ready` 後の復元用）。 */
+    /** 既知のポリラインを再適用する（地図 `ready` 後の復元用）。タイルで描く線（ハンドル無し）は飛ばす。 */
     fun reapply() {
-        renderer.reapply(polylineManager.allEntities().map { it.polyline })
+        renderer.reapply(polylineManager.allEntities().mapNotNull { it.polyline as LongdoPolylineHandle? })
     }
 }

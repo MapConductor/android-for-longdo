@@ -38,6 +38,8 @@ import com.mapconductor.core.ResourceProvider
 import com.mapconductor.core.circle.CircleCapableInterface
 import com.mapconductor.core.features.GeoPoint
 import com.mapconductor.core.groundimage.GroundImageCapableInterface
+import com.mapconductor.core.map.CameraBearing
+import com.mapconductor.core.map.CameraPaddingEmulation
 import com.mapconductor.core.map.LocalMapOverlayRegistry
 import com.mapconductor.core.map.LocalMapServiceRegistry
 import com.mapconductor.core.map.LocalMapViewController
@@ -45,10 +47,14 @@ import com.mapconductor.core.map.MapCameraPosition
 import com.mapconductor.core.map.MapCapability
 import com.mapconductor.core.map.MapCapabilityStatus
 import com.mapconductor.core.map.MapServiceRegistrations
+import com.mapconductor.core.map.MapViewStyle
+import com.mapconductor.core.map.MapViewStyleEffect
 import com.mapconductor.core.map.VisibleRegion
 import com.mapconductor.core.marker.MarkerCapableInterface
+import com.mapconductor.core.marker.MarkerDrawOrder
 import com.mapconductor.core.marker.MarkerRenderingSupportKey
 import com.mapconductor.core.marker.MarkerState
+import com.mapconductor.core.marker.rememberMarkerDrawOrderFrame
 import com.mapconductor.core.polygon.PolygonCapableInterface
 import com.mapconductor.core.polyline.PolylineCapableInterface
 import com.mapconductor.core.raster.RasterLayerCapableInterface
@@ -87,6 +93,15 @@ fun LongdoMapView(
     onCameraMoveStart: OnCameraMoveHandler? = null,
     onCameraMove: OnCameraMoveHandler? = null,
     onCameraMoveEnd: OnCameraMoveHandler? = null,
+    /**
+     * How the map looks, when the app states it rather than naming a design.
+     *
+     * A vector style *is* the basemap. `com.mapconductor:vectorstyle` builds
+     * one; what happens underneath depends on this backend and the app does
+     * not have to know.
+     */
+    style: MapViewStyle? = null,
+    onStyleDiagnostics: ((List<String>) -> Unit)? = null,
     content: (@Composable MapViewScope.() -> Unit)? = null,
 ) {
     LongdoMapSurface(
@@ -100,6 +115,8 @@ fun LongdoMapView(
         onCameraMoveStart = onCameraMoveStart,
         onCameraMove = onCameraMove,
         onCameraMoveEnd = onCameraMoveEnd,
+        style = style,
+        onStyleDiagnostics = onStyleDiagnostics,
         content = content,
     )
 }
@@ -131,6 +148,15 @@ fun LongdoMapSurface(
     onCameraMove: OnCameraMoveHandler? = null,
     onCameraMoveEnd: OnCameraMoveHandler? = null,
     onControllerReady: ((LongdoMapViewController) -> Unit)? = null,
+    /**
+     * How the map looks, when the app states it rather than naming a design.
+     *
+     * A vector style *is* the basemap. `com.mapconductor:vectorstyle` builds
+     * one; what happens underneath depends on this backend and the app does
+     * not have to know.
+     */
+    style: MapViewStyle? = null,
+    onStyleDiagnostics: ((List<String>) -> Unit)? = null,
     content: (@Composable MapViewScope.() -> Unit)? = null,
 ) {
     val context = LocalContext.current
@@ -204,6 +230,16 @@ fun LongdoMapSurface(
     DisposableEffect(state) {
         onDispose { registrations.disposeAll() }
     }
+
+    // 同じ理由で、スタイルの設置もここで呼ぶ（MapViewBase を通るプロバイダは
+    // あちらで 1 回呼んでいる）。何が起きるかはバックエンドが宣言した能力で
+    // 決まるので、このプロバイダ固有の分岐は無い。
+    MapViewStyleEffect(
+        state = state,
+        style = style,
+        controller = controller,
+        onDiagnostics = onStyleDiagnostics,
+    )
 
     // タイル経路に倒すかはコントローラが件数を見て決める（他プロバイダと同じ規則）。
     // ここで null を Default へ正規化するのも maplibre / googlemaps / here と揃えてある。
@@ -290,29 +326,33 @@ fun LongdoMapSurface(
         pushTargets()
         onLoaded?.invoke(currentState)
     }
-    bridge.onMapClick = { point, zoom ->
+    bridge.onMapClick = { point, _ ->
         // marker → circle → groundImage → polyline → polygon → map のカスケード。
         // **必ずどれか 1 つだけ**が配送される（他プロバイダと同じ）。
         // 順序と先勝ちはコアの dispatchOverlayTap が持つ。マーカーだけは Longdo の
         // タイルレンダラでヒットテストするのでここで先に見る。
-        if (!controller.handleMarkerTap(point, zoom) && !controller.dispatchOverlayTap(point)) {
+        if (!controller.handleMarkerTap(point) && !controller.dispatchOverlayTap(point)) {
             onClick?.invoke(point)
         }
     }
     bridge.onCameraMove = cameraMove@{ lon, lat, zoom, bearing, tilt, bounds ->
-        val base = currentState.cameraPosition
         val region =
             bounds?.let {
                 VisibleRegion(bounds = it, nearLeft = null, nearRight = null, farLeft = null, farRight = null)
             }
+        // Longdo が返す中心は画面中央。パディングを付けているなら、その中央の位置に直す。
         val updated =
-            MapCameraPosition(
-                position = GeoPoint(latitude = lat, longitude = lon),
-                zoom = LongdoMapViewController.longdoZoomToCore(zoom),
-                bearing = bearing,
-                tilt = tilt,
-                paddings = base.paddings,
-                visibleRegion = region,
+            CameraPaddingEmulation.fromNativeCamera(
+                MapCameraPosition(
+                    position = GeoPoint(latitude = lat, longitude = lon),
+                    zoom = LongdoMapViewController.longdoZoomToCore(zoom),
+                    bearing = CameraBearing.bearingFromNativeHeading(bearing),
+                    tilt = tilt,
+                    visibleRegion = region,
+                ),
+                controller.cameraPaddings,
+                LONGDO_VERTICAL_FOV,
+                controller.viewportHeightDp(),
             )
         // 範囲・ズーム制限に違反していれば矩形内へ引き戻す（Longdo にはネイティブの範囲制限 API が
         // 無いため）。android-sdk の HERE/ArcGIS/TomTom と同じく、補正した回は state 更新も
@@ -378,8 +418,12 @@ fun LongdoMapSurface(
             )
         }
 
+        // 地図が回って止まったら、同じ zIndex の前後を画面の上下で並べ直す。
+        val drawOrderFrame = rememberMarkerDrawOrderFrame { currentState.cameraPosition }
         if (mapReady) {
-            markers.forEach { markerState ->
+            // 後に置いたものほど上に描かれる。zIndex が大きいほど、同じなら画面で下ほど上
+            // （[MarkerDrawOrder]）。足した順には任せない。
+            markers.sortedBy { MarkerDrawOrder.of(it.zIndex, it.position, drawOrderFrame) }.forEach { markerState ->
                 key(markerState.id) {
                     LongdoMarkerOverlay(
                         marker = markerState,
@@ -497,6 +541,17 @@ fun LongdoMapSurface(
         onDispose {
             moveDispatcher.cancel()
             controller.destroy()
+            // No MapViewBase here to do it: the state (which the app keeps) must
+            // not hold on to the destroyed controller and its overlays.
+            state.detachController(controller)
+            // The WebView is the map. Not destroyed, it keeps its renderer and
+            // the JS bridge, and through them the controller with every overlay.
+            // This runs for a configuration change too: the old Activity's
+            // WebView is never shown again (the state is what survives).
+            (longdoMap.parent as? ViewGroup)?.removeView(longdoMap)
+            longdoMap.removeJavascriptInterface(BRIDGE_NAME)
+            longdoMap.stopLoading()
+            longdoMap.destroy()
         }
     }
 }

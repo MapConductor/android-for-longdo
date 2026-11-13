@@ -1,5 +1,9 @@
 package com.mapconductor.longdo
 
+import com.mapconductor.core.circle.CIRCLE_TILE_LAYER_ID
+import com.mapconductor.core.controller.OverlayKind
+import com.mapconductor.core.polygon.POLYGON_TILE_LAYER_ID
+import com.mapconductor.core.polyline.POLYLINE_TILE_LAYER_ID
 import com.mapconductor.core.raster.RasterHeaderRuleSet
 import com.mapconductor.core.raster.RasterLayerSource
 import com.mapconductor.core.raster.RasterLayerState
@@ -23,10 +27,10 @@ internal fun LongdoMapViewController.applyRaster(state: RasterLayerState) {
     val layerSpec = rasterLayerSpec(layerId, srcId, state.opacity, state.visible)
     when {
         prev == null ->
-            runRasterJs(addRasterJs(srcId, layerId, spec, layerSpec))
-        prev.source != state.source -> {
+            runRasterJs(addRasterJs(srcId, layerId, spec, layerSpec, rasterAddLayerJs(layerSpec, state)))
+        prev.source != state.source || prev.zIndex != state.zIndex -> {
             runRasterJs(removeRasterJs(state.id))
-            runRasterJs(addRasterJs(srcId, layerId, spec, layerSpec))
+            runRasterJs(addRasterJs(srcId, layerId, spec, layerSpec, rasterAddLayerJs(layerSpec, state)))
         }
         else -> {
             if (prev.opacity != state.opacity) runRasterJs(setRasterOpacityJs(layerId, state.opacity))
@@ -35,6 +39,20 @@ internal fun LongdoMapViewController.applyRaster(state: RasterLayerState) {
     }
     appliedRasters[state.id] = state
 }
+
+private fun rasterAddLayerJs(
+    layerSpec: String,
+    state: RasterLayerState,
+): String =
+    if (state.id == POLYGON_TILE_LAYER_ID) {
+        LongdoOverlayStacking.addPolygonTileLayerJs(layerSpec)
+    } else if (state.id == CIRCLE_TILE_LAYER_ID) {
+        LongdoOverlayStacking.addCircleTileLayerJs(layerSpec)
+    } else if (state.id == POLYLINE_TILE_LAYER_ID) {
+        LongdoOverlayStacking.addPolylineTileLayerJs(layerSpec)
+    } else {
+        LongdoOverlayStacking.addLayerJs(layerSpec, OverlayKind.RasterLayer, state.zIndex)
+    }
 
 internal fun LongdoMapViewController.runRasterJs(js: String) {
     runCatching { longdoMap.run(js) {} }
@@ -79,6 +97,15 @@ internal fun LongdoMapViewController.addRasterJs(
     layerId: String,
     sourceSpec: String,
     layerSpec: String,
+): String = addRasterJs(sourceId, layerId, sourceSpec, layerSpec, LongdoOverlayStacking.addLayerJs(layerSpec, OverlayKind.RasterLayer))
+
+/** [addLayer] は帯の順で層を足す JS（[LongdoOverlayStacking.addLayerJs]）。 */
+internal fun LongdoMapViewController.addRasterJs(
+    sourceId: String,
+    layerId: String,
+    sourceSpec: String,
+    layerSpec: String,
+    addLayer: String,
 ): String =
     """
     (function(){var m=map.Renderer; if(!m)return;
@@ -86,12 +113,39 @@ internal fun LongdoMapViewController.addRasterJs(
       function apply(){
         try{
           if(!m.getSource('$sourceId'))m.addSource('$sourceId',$sourceSpec);
-          if(!m.getLayer('$layerId'))m.addLayer($layerSpec);
+          if(!m.getLayer('$layerId'))$addLayer
         }catch(e){ if(tries++<30)setTimeout(apply,150); }
       }
       apply();
     })()
     """.trimIndent()
+
+/**
+ * ベースレイヤ切替（= 内部スタイルの差し替え）のあとに、[rasters] を載せ直す JS。
+ *
+ * `style.load` で一度、保険に 1.5 秒後にもう一度。どちらも「無ければ足す」なので
+ * 二重にはならない。差し替え前に走った分は差し替えで消え、あとの分が残る。
+ */
+internal fun LongdoMapViewController.readdRastersAfterStyleSwapJs(rasters: List<RasterLayerState>): String {
+    val adds =
+        rasters
+            .mapNotNull { state ->
+                val spec = rasterSourceSpec(state.source) ?: return@mapNotNull null
+                val srcId = rasterSourceId(state.id)
+                val layerId = rasterLayerId(state.id)
+                val layerSpec = rasterLayerSpec(layerId, srcId, state.opacity, state.visible)
+                val addLayer =
+                    if (state.id == markerTileState?.id) {
+                        LongdoOverlayStacking.addMarkerTileLayerJs(layerSpec)
+                    } else {
+                        rasterAddLayerJs(layerSpec, state)
+                    }
+                "try{if(!m.getSource('$srcId'))m.addSource('$srcId',$spec);" +
+                    "if(!m.getLayer('$layerId'))$addLayer}catch(e){}"
+            }.joinToString("")
+    return "(function(){var m=map.Renderer;if(!m)return;function re(){$adds}" +
+        "m.once('style.load',function(){setTimeout(re,0);});setTimeout(re,1500);})()"
+}
 
 internal fun LongdoMapViewController.removeRasterJs(id: String): String {
     val srcId = rasterSourceId(id)

@@ -5,8 +5,11 @@ import com.longdo.sdk3.LongdoMap
 import com.mapconductor.core.circle.CircleEntityInterface
 import com.mapconductor.core.circle.CircleOverlayRendererInterface
 import com.mapconductor.core.circle.CircleState
+import com.mapconductor.core.controller.OverlayKind
 import com.mapconductor.core.geometry.OverlayGeoJson
 import com.mapconductor.core.geometry.circleToRing
+import com.mapconductor.longdo.LongdoOverlayStacking
+import com.mapconductor.longdo.awaitPageLayers
 import org.json.JSONObject
 
 /**
@@ -21,9 +24,17 @@ import org.json.JSONObject
 class LongdoCircleOverlayRenderer(
     private val longdoMap: LongdoMap,
 ) : CircleOverlayRendererInterface<LongdoCircleHandle> {
+    /**
+     * Returns once the layers are on the page's map, so the circles'
+     * `onAdded` comes after they are (see [com.mapconductor.longdo.PageLayerWait]).
+     */
     override suspend fun onAdd(
         data: List<CircleOverlayRendererInterface.AddParamsInterface>,
-    ): List<LongdoCircleHandle?> = data.map { addCircle(it.state) }
+    ): List<LongdoCircleHandle?> {
+        val handles = data.map { addCircle(it.state) }
+        longdoMap.awaitPageLayers(handles.filterNotNull().flatMap { listOf(it.fillLayerId, it.lineLayerId) })
+        return handles
+    }
 
     override suspend fun onChange(
         data: List<CircleOverlayRendererInterface.ChangeParamsInterface<LongdoCircleHandle>>,
@@ -55,8 +66,12 @@ class LongdoCircleOverlayRenderer(
         handles.forEach { runJs(addJs(it)) }
     }
 
+    /** 層の id → zIndex（帯の中の順）。 */
+    private val zIndexByLayer = java.util.concurrent.ConcurrentHashMap<String, Int>()
+
     private fun addCircle(state: CircleState): LongdoCircleHandle? {
         val feature = buildGeoJson(state) ?: return null
+        zIndexByLayer["circle-fill-${state.id}"] = state.zIndex ?: 0
         val fillArgb = state.fillColor.toArgb()
         val strokeArgb = state.strokeColor.toArgb()
         val handle =
@@ -137,6 +152,9 @@ class LongdoCircleOverlayRenderer(
                         .put("line-opacity", handle.strokeOpacity)
                         .put("line-width", handle.strokeWidth),
                 ).toString()
+        // サークルの帯。輪郭は塗りの直後。
+        val fillAdd = LongdoOverlayStacking.addLayerJs(fillSpec, OverlayKind.Circle, zIndexByLayer[handle.fillLayerId] ?: 0)
+        val lineAdd = LongdoOverlayStacking.addLayerJs(lineSpec, OverlayKind.Circle, zIndexByLayer[handle.fillLayerId] ?: 0)
         return """
             (function(){var m=map.Renderer; if(!m)return;
               var tries=0;
@@ -144,8 +162,8 @@ class LongdoCircleOverlayRenderer(
                 try{
                   if(!m.getSource('${handle.sourceId}'))
                     m.addSource('${handle.sourceId}',{type:'geojson',data:${handle.featureJson}});
-                  if(!m.getLayer('${handle.fillLayerId}'))m.addLayer($fillSpec);
-                  if(!m.getLayer('${handle.lineLayerId}'))m.addLayer($lineSpec);
+                  if(!m.getLayer('${handle.fillLayerId}'))$fillAdd
+                  if(!m.getLayer('${handle.lineLayerId}'))$lineAdd
                 }catch(e){ if(tries++<30)setTimeout(apply,150); }
               }
               apply();

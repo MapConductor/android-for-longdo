@@ -6,9 +6,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import com.mapconductor.compose.map.BaseMapViewSaver
+import com.mapconductor.core.InternalMapConductorApi
+import com.mapconductor.core.map.AttributionRule
 import com.mapconductor.core.map.MapCameraPosition
 import com.mapconductor.core.map.MapCameraPositionInterface
 import com.mapconductor.core.map.MapViewState
+import com.mapconductor.core.map.MapViewStateBundle
 import com.mapconductor.core.map.MapViewStateInterface
 import android.os.Bundle
 
@@ -35,7 +38,10 @@ class LongdoViewState(
     LongdoViewStateInterface {
     private var _mapDesignType by mutableStateOf(mapDesignType)
 
-    private var controller: LongdoMapViewController? = null
+    // Read through the base so that letting go of the controller there (MapViewBase
+    // does it when the map is torn down) leaves nothing behind here.
+    private val controller: LongdoMapViewController?
+        get() = attachedMapController as? LongdoMapViewController
 
     override var mapDesignType: LongdoMapDesignTypeInterface
         get() = _mapDesignType
@@ -46,7 +52,6 @@ class LongdoViewState(
 
     /** MapView 生成時にコントローラを紐付ける。 */
     fun setController(controller: LongdoMapViewController) {
-        this.controller = controller
         // 初期カメラは LongdoMap.LOCATION として地図読み込み前に渡すので、接続時には移動しない。
         attachController(controller, moveToInitialCamera = false)
     }
@@ -62,27 +67,44 @@ class LongdoViewState(
 
 /**
  * [LongdoViewState] の保存・復元を行う Saver。
- * デザインは [LongdoMapDesignTypeInterface.id] を保存し、[LongdoDesign.fromId] で復元する。
+ * デザインは id・レイヤ名・attributionRules を保存する。id だけで [LongdoDesign.fromId] に
+ * 頼ると、定義に無いデザインは [LongdoDesign.Normal] に化け、attributionRules も落ちる。
  */
 class LongdoMapViewSaver : BaseMapViewSaver<LongdoViewState>() {
     override fun saveMapDesign(
         state: LongdoViewState,
         bundle: Bundle,
     ) {
-        bundle.putString(KEY_DESIGN_ID, state.mapDesignType.id)
+        val design = state.mapDesignType
+        bundle.putString(KEY_DESIGN_ID, design.id)
+        bundle.putString(KEY_LAYER_NAME, design.layerName)
+        MapViewStateBundle.putAttributionRules(bundle, design.attributionRules)
     }
 
     override fun createState(
         stateId: String,
         mapDesignBundle: Bundle?,
         cameraPosition: MapCameraPosition,
-    ): LongdoViewState {
-        val designId = mapDesignBundle?.getString(KEY_DESIGN_ID)
-        return LongdoViewState(
-            mapDesignType = LongdoDesign.fromId(designId),
+    ): LongdoViewState =
+        LongdoViewState(
+            mapDesignType = restoreDesign(mapDesignBundle),
             id = stateId,
             initialCameraPosition = cameraPosition,
         )
+
+    private fun restoreDesign(bundle: Bundle?): LongdoMapDesignTypeInterface {
+        val designId = bundle?.getString(KEY_DESIGN_ID)
+        // レイヤ名を持たない以前の形式は id から引く。
+        val layerName = bundle?.getString(KEY_LAYER_NAME) ?: return LongdoDesign.fromId(designId)
+        val id = designId ?: LongdoDesign.Normal.id
+        val rules = MapViewStateBundle.getAttributionRules(bundle)
+        // LongdoDesign は attributionRules を持てない。規則が無ければ LongdoDesign で戻し、
+        // 定義済み（LongdoDesign.Gray など）と等しくなるようにする。
+        return if (rules.isEmpty()) {
+            LongdoDesign(id = id, layerName = layerName)
+        } else {
+            RestoredLongdoDesign(id = id, layerName = layerName, attributionRules = rules)
+        }
     }
 
     override fun getStateId(state: LongdoViewState): String = state.id
@@ -90,6 +112,19 @@ class LongdoMapViewSaver : BaseMapViewSaver<LongdoViewState>() {
     private companion object {
         const val KEY_DESIGN_ID = "longdo_design_id"
     }
+}
+
+// 公開 API の門番（javap）にコンパニオンの定数が載らないよう、ファイル private にする。
+private const val KEY_LAYER_NAME = "longdo_layer_name"
+
+/** attributionRules を持つデザインを復元するときの入れ物（[LongdoDesign] は規則を持てない）。 */
+@InternalMapConductorApi
+internal data class RestoredLongdoDesign(
+    override val id: String,
+    override val layerName: String,
+    override val attributionRules: List<AttributionRule>,
+) : LongdoMapDesignTypeInterface {
+    override fun getValue(): String = id
 }
 
 /**

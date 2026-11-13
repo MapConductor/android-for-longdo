@@ -15,8 +15,8 @@ class LongdoCircleController(
     override val renderer: LongdoCircleOverlayRenderer,
     circleManager: CircleManagerInterface<LongdoCircleHandle> = CircleManager(),
 ) : CircleController<LongdoCircleHandle>(circleManager, renderer) {
-    /** 既知の円を再適用する（地図 `ready` 後の復元用）。 */
+    /** 既知の円を再適用する（地図 `ready` 後の復元用）。タイルで描く円（ハンドル無し）は飛ばす。 */
     fun reapply() {
-        renderer.reapply(circleManager.allEntities().map { it.circle })
+        renderer.reapply(circleManager.nativeEntities().mapNotNull { it.circle as LongdoCircleHandle? })
     }
 }

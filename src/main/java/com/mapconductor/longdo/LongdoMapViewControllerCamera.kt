@@ -2,6 +2,8 @@ package com.mapconductor.longdo
 
 import com.mapconductor.core.features.GeoPointInterface
 import com.mapconductor.core.features.GeoRectBounds
+import com.mapconductor.core.map.CameraBearing
+import com.mapconductor.core.map.CameraPaddingEmulation
 import com.mapconductor.core.map.MapCameraPosition
 import com.mapconductor.core.spherical.Spherical
 import org.json.JSONObject
@@ -25,7 +27,20 @@ internal fun LongdoMapViewController.applyCameraRestrictionCorrectionIfNeeded(cu
     return true
 }
 
+/**
+ * Longdo の地図（MapLibre GL）の縦方向の視野角（度）。MapLibre の既定値で、地図の大きさに
+ * よらず一定（焦点距離 = 地図の高さ × 1.5）。
+ */
+internal const val LONGDO_VERTICAL_FOV = 36.87
+
+/** 地図の高さ（dp）。パディングのエミュレーションで遠近を解くのに使う。 */
+internal fun LongdoMapViewController.viewportHeightDp(): Double {
+    val density = holder.mapView.resources.displayMetrics.density
+    return holder.mapView.height / density.toDouble()
+}
+
 internal fun LongdoMapViewController.handleMoveCamera(position: MapCameraPosition) {
+    position.paddings?.let { cameraPaddings = it }
     if (mapReady) applyCamera(position) else pendingCameraPosition = position
 }
 
@@ -36,6 +51,7 @@ internal fun LongdoMapViewController.handleAnimateCamera(
     // Longdo の JS ブリッジでは中心（location）とズーム（zoom）が別コマンドで、双方をアニメーション指定
     // すると後発のズームがパンのアニメーションを打ち切ってしまい中心が移動しない。カメラ同期では同期先が
     // ソース側の連続イベントを追って滑らかに追従するため、ここでは瞬時に確定位置へ適用する。
+    position.paddings?.let { cameraPaddings = it }
     if (mapReady) applyCamera(position) else pendingCameraPosition = position
 }
 
@@ -51,11 +67,18 @@ internal fun LongdoMapViewController.handleAnimateCamera(
  * いずれかをアニメーション指定すると後続コマンドが直前のアニメーションを打ち切ってしまう。
  */
 internal fun LongdoMapViewController.applyCamera(position: MapCameraPosition) {
-    val native = nativeCameraFor(position)
+    // パディングは中心のずらしで再現する（Longdo にパディングの口が無いため）。
+    val padded =
+        CameraPaddingEmulation.toNativeCamera(
+            position.copy(paddings = cameraPaddings),
+            LONGDO_VERTICAL_FOV,
+            viewportHeightDp(),
+        )
+    val native = nativeCameraFor(padded)
     runCatching {
         longdoMap.call("location", listOf(native.target.toLongdoLocation(), false)) {}
         longdoMap.call("zoom", listOf(native.longdoZoom, false)) {}
-        longdoMap.call("rotate", listOf(position.bearing, false)) {}
+        longdoMap.call("rotate", listOf(CameraBearing.toNativeHeading(padded.bearing), false)) {}
         longdoMap.call("pitch", listOf(native.pitch)) {}
     }
 }
@@ -90,7 +113,9 @@ internal fun LongdoMapViewController.nativeCameraFor(position: MapCameraPosition
     // 高度は統一ズーム（Google）基準で算出する（Longdo ネイティブズームではない）。
     val altitude = zoomConverter.zoomLevelToAltitude(position.zoom, position.position.latitude, 0.0)
     val distanceForward = altitude * tan(tiltAbsRad)
-    val target = Spherical.computeOffset(position.position, distanceForward, position.bearing)
+    val target =
+        Spherical
+            .computeOffset(position.position, distanceForward, CameraBearing.toNativeHeading(position.bearing))
     return NativeCamera(target, longdoZoom, tiltAbsDeg)
 }
 

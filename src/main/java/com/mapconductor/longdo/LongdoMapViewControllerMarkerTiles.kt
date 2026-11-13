@@ -71,10 +71,12 @@ internal fun LongdoMapViewController.applyMarkerTileRaster(state: RasterLayerSta
     val prev = markerTileState
     val layerSpec = rasterLayerSpec(layerId, srcId, state.opacity, state.visible)
     when {
-        prev == null -> runRasterJs(addRasterJs(srcId, layerId, spec, layerSpec))
+        // マーカーのタイルはマーカーの帯（ポリライン等より上）。
+        prev == null ->
+            runRasterJs(addRasterJs(srcId, layerId, spec, layerSpec, LongdoOverlayStacking.addMarkerTileLayerJs(layerSpec)))
         prev.source != state.source -> {
             runRasterJs(removeRasterJs(state.id))
-            runRasterJs(addRasterJs(srcId, layerId, spec, layerSpec))
+            runRasterJs(addRasterJs(srcId, layerId, spec, layerSpec, LongdoOverlayStacking.addMarkerTileLayerJs(layerSpec)))
         }
     }
     markerTileState = state
@@ -92,14 +94,12 @@ internal fun LongdoMapViewController.removeMarkerTileRaster() {
  * 流さない（他プロバイダと同じ）。
  *
  * @param point タップ座標。
- * @param nativeZoom Longdo ネイティブ（MapLibre）ズーム。
  * @return マーカーがタップを消費したら true。
  */
 internal fun LongdoMapViewController.handleMarkerTap(
     point: com.mapconductor.core.features.GeoPoint,
-    nativeZoom: Double,
 ): Boolean {
-    val state = markerTileRenderer?.findMarkerAt(point, nativeZoom) ?: return false
+    val state = markerTileRenderer?.findMarkerAt(point, holder::toScreenOffset) ?: return false
     // clickable = false のマーカーは透過させる（コアの clickableOnly と同じ方針）。
     if (!state.clickable) return false
     state.onClick?.invoke(state)

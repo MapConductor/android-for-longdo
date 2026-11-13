@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.mapconductor.compose.info.InfoBubbleEntry
 import com.mapconductor.core.marker.DefaultMarkerIcon
+import com.mapconductor.core.marker.iconRevision
 import com.mapconductor.core.marker.MarkerAnimation
 import com.mapconductor.core.marker.MarkerState
 import com.mapconductor.settings.Settings
@@ -67,7 +68,10 @@ internal fun LongdoMarkerOverlay(
     onDragMove: (marker: MarkerState, devicePx: Offset) -> Unit = { _, _ -> },
 ) {
     val density = LocalDensity.current.density
-    val bitmapIcon = remember(marker.icon) { (marker.icon ?: DefaultMarkerIcon()).toBitmapIcon() }
+    // URL の画像が届くと、アイコンは同じインスタンスのまま見た目だけ変わる。iconRevision が
+    // そのとき増えるので、それもキーにする（読むことで描き直しも起きる）。
+    val bitmapIcon =
+        remember(marker.icon, marker.iconRevision) { (marker.icon ?: DefaultMarkerIcon()).toBitmapIcon() }
     val widthPx = bitmapIcon.size.width
     val heightPx = bitmapIcon.size.height
     val anchor = bitmapIcon.anchor

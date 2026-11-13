@@ -1,10 +1,13 @@
 package com.mapconductor.longdo.groundimage
 
 import com.longdo.sdk3.LongdoMap
+import com.mapconductor.core.controller.OverlayKind
 import com.mapconductor.core.features.GeoRectBounds
 import com.mapconductor.core.groundimage.GroundImageEntityInterface
 import com.mapconductor.core.groundimage.GroundImageOverlayRendererInterface
 import com.mapconductor.core.groundimage.GroundImageState
+import com.mapconductor.longdo.LongdoOverlayStacking
+import com.mapconductor.longdo.awaitPageLayers
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import android.graphics.Bitmap
@@ -29,9 +32,17 @@ import android.util.Base64
 class LongdoGroundImageOverlayRenderer(
     private val longdoMap: LongdoMap,
 ) : GroundImageOverlayRendererInterface<LongdoGroundImageHandle> {
+    /**
+     * Returns once the layers are on the page's map, so the ground images'
+     * `onAdded` comes after they are (see [com.mapconductor.longdo.PageLayerWait]).
+     */
     override suspend fun onAdd(
         data: List<GroundImageOverlayRendererInterface.AddParamsInterface>,
-    ): List<LongdoGroundImageHandle?> = data.map { addGroundImage(it.state) }
+    ): List<LongdoGroundImageHandle?> {
+        val handles = data.map { addGroundImage(it.state) }
+        longdoMap.awaitPageLayers(handles.mapNotNull { it?.layerId })
+        return handles
+    }
 
     override suspend fun onChange(
         data: List<GroundImageOverlayRendererInterface.ChangeParamsInterface<LongdoGroundImageHandle>>,
@@ -146,6 +157,8 @@ class LongdoGroundImageOverlayRenderer(
                 .put("paint", JSONObject().put("raster-opacity", handle.opacity))
                 .put("layout", JSONObject().put("visibility", "visible"))
                 .toString()
+        // GroundImage の帯（ラスターの上、ポリゴンの下）。
+        val layerAdd = LongdoOverlayStacking.addLayerJs(layerSpec, OverlayKind.GroundImage)
         return """
             (function(){var m=map.Renderer; if(!m)return;
               var tries=0;
@@ -154,7 +167,7 @@ class LongdoGroundImageOverlayRenderer(
                   if(!m.getSource('${handle.sourceId}'))
                     m.addSource('${handle.sourceId}',
                       {type:'image',url:'${handle.imageUrl}',coordinates:${handle.coordinatesJson}});
-                  if(!m.getLayer('${handle.layerId}'))m.addLayer($layerSpec);
+                  if(!m.getLayer('${handle.layerId}'))$layerAdd
                 }catch(e){ if(tries++<30)setTimeout(apply,150); }
               }
               apply();

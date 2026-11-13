@@ -1,6 +1,9 @@
 package com.mapconductor.longdo
 
 import com.longdo.sdk3.LongdoMap
+import com.mapconductor.core.circle.CIRCLE_TILE_LAYER_ID
+import com.mapconductor.core.circle.CircleTiler
+import com.mapconductor.core.circle.circleTileRasterLayerState
 import com.mapconductor.core.circle.CircleCapableInterface
 import com.mapconductor.core.circle.OnCircleEventHandler
 import com.mapconductor.core.controller.BaseMapViewController
@@ -8,7 +11,10 @@ import com.mapconductor.core.features.GeoRectBounds
 import com.mapconductor.core.groundimage.GroundImageCapableInterface
 import com.mapconductor.core.groundimage.GroundImageState
 import com.mapconductor.core.groundimage.OnGroundImageEventHandler
+import com.mapconductor.core.map.CameraPaddingEmulation
 import com.mapconductor.core.map.MapCameraPosition
+import com.mapconductor.core.map.MapPaddings
+import com.mapconductor.core.map.MapPaddingsInterface
 import com.mapconductor.core.map.MapUISettings
 import com.mapconductor.core.marker.MarkerCapableInterface
 import com.mapconductor.core.marker.MarkerRenderingSupport
@@ -17,10 +23,16 @@ import com.mapconductor.core.marker.MarkerTilingOptions
 import com.mapconductor.core.marker.OnMarkerEventHandler
 import com.mapconductor.core.marker.StrategyMarkerController
 import com.mapconductor.core.polygon.OnPolygonEventHandler
+import com.mapconductor.core.polygon.POLYGON_TILE_LAYER_ID
 import com.mapconductor.core.polygon.PolygonCapableInterface
+import com.mapconductor.core.polygon.PolygonTiler
+import com.mapconductor.core.polygon.polygonTileRasterLayerState
 import com.mapconductor.core.polyline.OnPolylineEventHandler
+import com.mapconductor.core.polyline.POLYLINE_TILE_LAYER_ID
 import com.mapconductor.core.polyline.PolylineCapableInterface
 import com.mapconductor.core.polyline.PolylineState
+import com.mapconductor.core.polyline.PolylineTiler
+import com.mapconductor.core.polyline.polylineTileRasterLayerState
 import com.mapconductor.core.raster.RasterLayerCapableInterface
 import com.mapconductor.core.raster.RasterLayerState
 import com.mapconductor.longdo.circle.LongdoCircleController
@@ -28,6 +40,7 @@ import com.mapconductor.longdo.circle.LongdoCircleOverlayRenderer
 import com.mapconductor.longdo.groundimage.LongdoGroundImageController
 import com.mapconductor.longdo.groundimage.LongdoGroundImageOverlayRenderer
 import com.mapconductor.longdo.marker.LongdoMarkerTileRenderer
+import com.mapconductor.longdo.marker.MarkerIdIndex
 import com.mapconductor.longdo.polygon.LongdoPolygonController
 import com.mapconductor.longdo.polygon.LongdoPolygonOverlayRenderer
 import com.mapconductor.longdo.polyline.LongdoPolylineController
@@ -38,7 +51,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * MapConductor コアと Longdo Map API3 SDK（[LongdoMap]）を橋渡しするマップコントローラ。
@@ -104,6 +119,49 @@ class LongdoMapViewController(
         registerOverlayController(polygonController)
         registerOverlayController(groundImageController)
         registerOverlayController(circleController)
+        // Many polygons are drawn as raster tiles. Longdo has no RasterLayer
+        // controller, so they are mounted like the marker tiles: outside the
+        // app's RasterLayer composition, which therefore never removes them.
+        polygonController.tiler =
+            PolygonTiler().apply {
+                onTemplate = { template, tileSize ->
+                    if (template != null) {
+                        // Returns once the tile layer is on the page's map: the tiled
+                        // polygons' onAdded is called on the return.
+                        mountRasterLayerOnMap(polygonTileRasterLayerState(template, tileSize))
+                    } else {
+                        unmountRasterLayer(POLYGON_TILE_LAYER_ID)
+                    }
+                }
+            }
+
+        // Many circles too: the same raster layer path, in the circle band.
+        circleController.tiler =
+            CircleTiler().apply {
+                onTemplate = { template, tileSize ->
+                    if (template != null) {
+                        // Returns once the tile layer is on the page's map: the tiled
+                        // circles' onAdded is called on the return.
+                        mountRasterLayerOnMap(circleTileRasterLayerState(template, tileSize))
+                    } else {
+                        unmountRasterLayer(CIRCLE_TILE_LAYER_ID)
+                    }
+                }
+            }
+
+        // Many polylines too: the same raster layer path, in the polyline band.
+        polylineController.tiler =
+            PolylineTiler().apply {
+                onTemplate = { template, tileSize ->
+                    if (template != null) {
+                        // Returns once the tile layer is on the page's map: the tiled
+                        // polylines' onAdded is called on the return.
+                        mountRasterLayerOnMap(polylineTileRasterLayerState(template, tileSize))
+                    } else {
+                        unmountRasterLayer(POLYLINE_TILE_LAYER_ID)
+                    }
+                }
+            }
         // ホルダーの投影にカメラを供給する。ホルダーはコントローラより先に作られるので
         // ここで繋ぐ。これが無いと toScreenOffset が常に null を返し、InfoBubble と
         // マーカー追従が理由も出ずに落ちる。
@@ -190,6 +248,14 @@ class LongdoMapViewController(
     @Volatile
     internal var mapReady: Boolean = false
 
+    /**
+     * 今カメラに付いているパディング（dp）。
+     *
+     * Longdo Map API3 にはパディングの口が無いので、カメラ中心をずらして再現し
+     * （[CameraPaddingEmulation]）、読むときに元へ戻すためにここで覚えておく。
+     */
+    internal var cameraPaddings: MapPaddingsInterface = MapPaddings.Zeros
+
     /** ready 前に要求された最後のカメラ位置。ready 時に適用する。 */
     internal var pendingCameraPosition: MapCameraPosition? = null
 
@@ -229,6 +295,11 @@ class LongdoMapViewController(
         dispatchCameraToOverlays()
         // Gesture JS issued before ready is dropped by the page; re-apply now.
         applyUISettings(appliedUISettings)
+        if (pendingMountedRasters.isNotEmpty()) {
+            val waiting = pendingMountedRasters.values.toList()
+            pendingMountedRasters.clear()
+            mainCoroutine.launch { waiting.forEach { applyRaster(it) } }
+        }
     }
 
     override fun setMapDesignType(value: LongdoMapDesignTypeInterface) {
@@ -239,6 +310,10 @@ class LongdoMapViewController(
                 listOf(LongdoMap.LongdoStatic("Layers", value.layerName)),
             ) {}
         }
+        // ベース切替は内部 MapLibre のスタイル差し替えで、こちらが `map.Renderer` へ足した
+        // ソース／レイヤはそこで消える。新しいスタイルが載ったら載せ直す。
+        val rasters = appliedRasters.values.toList() + listOfNotNull(markerTileState)
+        if (rasters.isNotEmpty()) runRasterJs(readdRastersAfterStyleSwapJs(rasters))
     }
 
     // --- MarkerCapableInterface ---
@@ -246,6 +321,8 @@ class LongdoMapViewController(
     override suspend fun compositionMarkers(data: List<MarkerState>) {
         if (shouldUseMarkerLayer(data.size)) {
             renderTiledMarkers(data)
+            // The tiled markers' onAdded waits for their tile layer (see [PageLayerWait]).
+            markerTileState?.let { longdoMap.awaitPageLayers(listOf(rasterLayerId(it.id))) }
         } else {
             _markers.value = data
         }
@@ -260,12 +337,17 @@ class LongdoMapViewController(
         }
     }
 
-    override fun hasMarker(state: MarkerState): Boolean =
-        if (markerTileRenderer?.markers?.isNotEmpty() == true) {
-            markerTileRenderer?.markers?.any { it.id == state.id } ?: false
+    override fun hasMarker(state: MarkerState): Boolean {
+        val tiled = markerTileRenderer?.markers
+        return if (tiled?.isNotEmpty() == true) {
+            tiledMarkerIds.contains(tiled, state.id)
         } else {
-            _markers.value.any { it.id == state.id }
+            overlayMarkerIds.contains(_markers.value, state.id)
         }
+    }
+
+    private val tiledMarkerIds = MarkerIdIndex()
+    private val overlayMarkerIds = MarkerIdIndex()
 
     @Deprecated("Use MarkerState.onDragStart instead.")
     override fun setOnMarkerDragStart(listener: OnMarkerEventHandler?) = Unit
@@ -291,15 +373,84 @@ class LongdoMapViewController(
 
     override suspend fun compositionRasterLayers(data: List<RasterLayerState>) {
         val newIds = data.map { it.id }.toSet()
-        appliedRasters.keys.filter { it !in newIds }.toList().forEach { id ->
-            runRasterJs(removeRasterJs(id))
-            appliedRasters.remove(id)
-        }
+        appliedRasters.keys
+            .filter { it !in newIds && it !in mountedRasterIds }
+            .toList()
+            .forEach { id ->
+                runRasterJs(removeRasterJs(id))
+                appliedRasters.remove(id)
+            }
         data.forEach { applyRaster(it) }
+        // Returns once the layers are on the page's map, so their onAdded comes after
+        // (see [PageLayerWait]). A source Longdo cannot show is not applied, nor waited for.
+        longdoMap.awaitPageLayers(data.filter { it.id in appliedRasters }.map { rasterLayerId(it.id) })
     }
+
+    /**
+     * content の外から載せたラスタの id。上の掃除から外すためにある。
+     *
+     * `compositionRasterLayers` は「アプリが宣言した集合」で全置換するので、
+     * 外から載せたものは次の再コンポーズで消える。他プロバイダでは
+     * [com.mapconductor.core.raster.RasterLayerController] の `upsert` が
+     * 同じ役割（`upsertedIds`）を持っている。
+     */
+    private val mountedRasterIds = mutableSetOf<String>()
+
+    /** [mountRasterLayer] が ready 前に受け取ったもの。 */
+    private val pendingMountedRasters = mutableMapOf<String, RasterLayerState>()
 
     override suspend fun updateRasterLayer(state: RasterLayerState) {
         applyRaster(state)
+    }
+
+    /**
+     * content の外から載せるラスタ（マーカータイル、ベクタースタイルのラスタ化）。
+     *
+     * 他プロバイダは [com.mapconductor.core.raster.RasterLayerController] を
+     * オーバーレイコントローラとして登録してあるので基底の実装で足りるが、
+     * Longdo は内部 MapLibre GL へ JS で直接足すのでそれが無い。
+     * id は [mountedRasterIds] に控えて composition の掃除から外す。
+     */
+    override fun mountRasterLayer(state: RasterLayerState) {
+        mountedRasterIds.add(state.id)
+        // ready 前に流した JS はページに捨てられる（`runRasterJs` は握りつぶす）。
+        // content 経由のラスタは composition が ready より後なので起きないが、
+        // ビューの外から載せるものは地図より先に来る。退避して [onMapReady] で出す。
+        if (!mapReady) {
+            pendingMountedRasters[state.id] = state
+            return
+        }
+        mainCoroutine.launch { applyRaster(state) }
+    }
+
+    /**
+     * [mountRasterLayer] that returns once the layer is on the page's map, for
+     * the polygon tiles: the tiled polygons' `onAdded` is called on the return.
+     * [mountRasterLayer] only queues the script (and before `ready` only keeps
+     * the layer), so they were reported before the map had their tiles' layer.
+     * Applied here rather than launched, so that a replaced source is gone
+     * before the layer is looked for.
+     */
+    internal suspend fun mountRasterLayerOnMap(state: RasterLayerState) {
+        withContext(Dispatchers.Main.immediate) {
+            if (mapReady) {
+                mountedRasterIds.add(state.id)
+                applyRaster(state)
+            } else {
+                mountRasterLayer(state)
+                mapLoaded.first { it }
+            }
+        }
+        longdoMap.awaitPageLayers(listOf(rasterLayerId(state.id)))
+    }
+
+    override fun unmountRasterLayer(id: String) {
+        mountedRasterIds.remove(id)
+        pendingMountedRasters.remove(id)
+        mainCoroutine.launch {
+            runRasterJs(removeRasterJs(id))
+            appliedRasters.remove(id)
+        }
     }
 
     override fun hasRasterLayer(state: RasterLayerState): Boolean = appliedRasters.containsKey(state.id)
@@ -374,6 +525,8 @@ class LongdoMapViewController(
         circleController.clear()
         removeMarkerTileRaster()
         markerTileRenderer?.clear()
+        // 拡張モジュール（クラスタリングなど）が登録した Strategy のマーカーも消す。
+        clearStrategyMarkerControllers()
     }
 
     internal var appliedUISettings: MapUISettings = MapUISettings.Default
